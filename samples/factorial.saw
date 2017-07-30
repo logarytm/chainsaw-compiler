@@ -1,0 +1,8 @@
+fn factorial(n int32) int32 {
+	var out int32 = 1;
+	until n < 1 {
+		out = out * n;
+		n = n - 1;
+	}
+	return out;
+}

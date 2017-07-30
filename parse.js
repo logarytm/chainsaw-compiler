@@ -5,7 +5,6 @@ const {
   readFile,
   writeFile,
   inspect,
-  showSyntaxError,
   isOutOfDate,
 } = require('./utility');
 

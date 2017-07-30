@@ -10,6 +10,13 @@
   const left = Symbol('left');
   const right = Symbol('right');
 
+  const reservedWords = [
+    'if', 'unless', 'fn', 'not', 'and', 'or', 'while', 'until', 'return',
+    'var', 'const'
+  ];
+
+  const emptyBody = tree.Body({ statements: [] });
+
   const binaryOperators = {
     '*': { associativity: left, precedence: 60 },
     '/': { associativity: left, precedence: 60 },
@@ -45,18 +52,42 @@
     return binaryOperators[operator].precedence;
   }
 
-  function nth(index) {
+  function nth(index, array = null) {
     return (element) => element[index];
+  }
+
+  function get(array, index, defaultValue = null) {
+    if (Array.isArray(array) && array[index] !== undefined) {
+      return array[index];
+    }
+
+    return defaultValue;
   }
 
   function value(v) {
     return () => v;
   }
 
+  function checkNotReserved(word) {
+    if (reservedWords.includes(word)) {
+      throwSyntaxError(`Unexpected reserved word ${word}.`);
+    }
+  }
+
+  function throwSyntaxError(message) {
+    const error = new Error(message);
+    error.location = location();
+    error.name = "SyntaxError";
+
+    throw error;
+  }
+
   function toString(characters) {
-    if (typeof characters === 'string') return characters;
+    if (typeof characters === 'string') {
+      return characters;
+    }
     if (!Array.isArray(characters)) {
-      throw new Error(`toString() accepts string or array of strings`);
+      throw new TypeError(`toString() accepts string or array of strings.`);
     }
 
     return characters
@@ -66,13 +97,16 @@
 
   function toInteger(s, base) {
     // TODO: line numbers in manual errors
+    s = toString(s);
     if (s[0] === '_' || s[s.length - 1] === '_') {
-      throw new Error('thousand separators allowed only inside numerals');
-    } else if (s.includes('__')) {
-      throw new Error('lolwut');
+      throwSyntaxError('Thousand separators allowed only inside numerals.');
     }
 
     return parseInt(s.replace(/_/g, ''), base);
+  }
+
+  function notEmpty(value) {
+    return value !== undefined;
   }
 
   function operatorsToTree({ head, tail }) {
@@ -117,15 +151,17 @@
 }
 
 Program
-  = _ statements: TopLevelStatement* _
-  { return statements; }
+  = _ statements: (TopLevelStatement _)* _
+  { return statements.map(nth(0)).filter(notEmpty); }
 
 TopLevelStatement
-  = definition: FunctionDefinition
+  = Comment
+  { }
+  / definition: FunctionDefinition
   { return definition; }
 
 FunctionDefinition
-  = FunctionToken _
+  = "fn" _
     name: Identifier _
     parameters: ParameterList _
     returnType: Type _
@@ -140,7 +176,9 @@ FunctionDefinition
   }
 
 ParameterList
-  = "(" _ head: NameTypePair tail: (_ "," _ NameTypePair)* _ ")" _
+  = "(" _ ")"
+  { return []; }
+  / "(" _ head: NameTypePair tail: (_ "," _ NameTypePair)* _ ")" _
   { return [head].concat(tail.map(nth(3))); }
 
 NameTypePair
@@ -148,11 +186,55 @@ NameTypePair
   { return { name, type }; }
 
 Body
-  = "{" _ statements: Statement* "}"
-  { return tree.Body({ statements }); }
+  = "{" _ statements: (Statement _)* "}"
+  { return tree.Body({ statements: statements.map(nth(0)).filter(notEmpty) }); }
 
 Statement
-  = EmptyStatement
+  = Comment
+  { }
+  / EmptyStatement
+  / "return" _ expression: Expression _ StatementTerminator
+  { return tree.ReturnStatement({ expression }); }
+  / keyword: ConditionalKeyword _
+    predicate: Expression _
+    thenBody: Body _
+    elseBody: ("else" _ Body)?
+  {
+    predicate = keyword === 'unless'
+      ? tree.UnaryOperator({ operator: 'not', operand: predicate })
+      : predicate;
+
+    return tree.ConditionalStatement({
+      predicate,
+      thenBody,
+      elseBody: get(elseBody, 2, emptyBody),
+    });
+  }
+  / keyword: LoopingKeyword _
+    predicate: Expression _
+    doBody: Body
+  {
+    predicate = keyword === 'until'
+      ? tree.UnaryOperator({ operator: 'not', operand: predicate })
+      : predicate;
+
+    return tree.LoopingStatement({
+      predicate,
+      doBody,
+    });
+  }
+  / "var" __
+    name: Identifier __
+    type: Type _
+    initial: ("=" _ Expression)? _
+    StatementTerminator
+  {
+    return tree.VariableDeclaration({
+      name,
+      type,
+      initial: get(initial, 3, null),
+    });
+  }
   / expression: Expression _ StatementTerminator
   { return tree.ExpressionStatement({ expression }); }
 
@@ -161,7 +243,7 @@ EmptyStatement
   { return tree.EmptyInstruction(); }
 
 StatementTerminator
-  = ";" _
+  = ";"
 
 Type
   = "pointer" _ "!" _ type: Type
@@ -169,7 +251,7 @@ Type
   / "array" _ "(" capacity: Expression ")" _ "!" _ type: Type
   { return tree.ArrayType({ type, capacity }); }
   / name: Identifier
-  { return tree.NamedType({ name }); }
+  { return tree.NamedType({ name: String(name) }); }
 
 Expression
   = binaryOperator: BinaryOperator
@@ -190,6 +272,8 @@ Primary
   { return identifier; }
   / number: Number
   { return number; }
+  / string: String
+  { return string; }
 
 FunctionApplication
   = name: Identifier _ args: ArgumentList
@@ -201,15 +285,19 @@ FunctionApplication
   }
 
 ArgumentList
-  = "(" _ head: Expression tail: (_ "," _ Expression)* _ ")" _
+  = "(" _ ")"
+  { return []; }
+  / "(" _ head: Expression tail: (_ "," _ Expression)* _ ")" _
   { return [head].concat(tail.map(nth(3))); }
 
 Identifier "identifier"
-  = name: ([a-zA-Z][a-zA-Z0-9'-]*)
+  = name: ([a-zA-Z][a-zA-Z0-9"-]*)
   {
+    name = toString(name);
+    checkNotReserved(name);
     return tree.Identifier({
-      name: toString(name),
-      toString: value(toString(name)),
+      name: name,
+      toString: value(name),
     });
   }
 
@@ -221,33 +309,60 @@ Number
   / digits: Digits
   { return tree.Number({ value: toInteger(digits, 10) }); }
 
+String
+  = '"' string: StringCharacter* '"'
+  { return tree.String({ string: toString(string) }); }
+
+StringCharacter
+  = "\\\\"
+  { return "\\"; }
+  / '\\"'
+  { return '"'; }
+  / "\\n"
+  { return "\n"; }
+  / "\\r"
+  { return "\r"; }
+  / "\\t"
+  { return "\t"; }
+  / "\\b"
+  { return "\b"; }
+  / "\\x" digits: ([0-9a-fA-F][0-9a-fA-F])
+  { return String.fromCharCode(toInteger(digits, 16)); }
+  / c: [^"]
+  { return c; }
+
 WhiteSpace "white space"
   = ([ \n\r\t]+)
   { }
 
+Comment
+  = "/*" (!"*/" .)* "*/"
+  { }
+
 _
-  = WhiteSpace?
+  = __?
 
 __
   = WhiteSpace
 
-FunctionToken = "fn"
-UnaryToken = '+' / '-' / '~' / 'not'
+ConditionalKeyword = "if" / "unless"
+LoopingKeyword = "while" / "until"
+UnaryToken = "+" / "-" / "~" / "not"
 
 BinaryToken
-  = '*' / '/' / 'mod' / '&'
-  / '+' / '-' / '|'
-  / '==' / '!=' / '<=' / '>=' / '<' / '>'
-  / 'and'
-  / 'or'
-  / '='
+  = "*" / "/" / "mod" / "&"
+  / "+" / "-" / "|"
+  / "==" / "!=" / "<=" / ">=" / "<" / ">"
+  / "and"
+  / "or"
+  / "="
 
 Digits
   = digits: [0-9_]+
   { return toString(digits); }
 
 HexadecimalDigits
-  = digits: [0-9a-f_]+
+  = digits: [0-9a-fA-F_]+
   { return toString(digits); }
 
 BinaryDigits

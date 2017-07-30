@@ -3,7 +3,7 @@ const { inspect } = require('./utility.js');
 
 const cli = require('meow')(`
   Usage
-    $ node d-show-tree.js <file>
+    $ node d-show-tree.js <file> [--debug]
 `, {
   alias: {
     d: 'debug',
