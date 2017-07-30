@@ -1,0 +1,3 @@
+fn hello() pointer!int16 {
+  print();
+}
