@@ -1,4 +1,3 @@
-const parse = require('./parse.js');
 const winston = require('winston');
 const { inspect, readFile } = require('./utility.js');
 
@@ -16,15 +15,15 @@ if (!cli.input.length) {
   process.exit(1);
 }
 
-const debugMode = cli.flags.debug;
+const debugMode = global.debugMode = cli.flags.debug;
 const filename = cli.input[0];
+const parse = require('./parse.js');
 
 try {
   inspect(parse(readFile(filename)));
 } catch (error) {
   if (!isSyntaxError(error)) throw error;
-
-  winston.error(`${error.message} (at ${filename}:${error.location.start.line})`);
+  winston.error(`at ${filename}:${error.location.start.line}: ${error.message}`);
   if (debugMode) {
     inspect(error);
   }

@@ -2,7 +2,7 @@ const winston = require('winston');
 const fs = require('fs');
 const peg = require('pegjs');
 
-const { readFile, writeFile, lastModified } = require('./utility');
+const { readFile, writeFile, lastModified, inspect } = require('./utility');
 
 const outputFileName = `${__dirname}/parse-generated.js`;
 const grammarFileName = `${__dirname}/parse.pegjs`;
@@ -17,9 +17,12 @@ function regenerate() {
       output: 'source',
       format: 'commonjs',
     });
-  } catch (e) {
+  } catch (error) {
     winston.error('during parser generation:');
-    winston.info(e.stack);
+    winston.error(`at line ${error.location.start.line}: ${error.message}`);
+    if (global.debugMode) {
+      inspect(error);
+    }
     process.exit(1);
   }
 

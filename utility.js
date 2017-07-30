@@ -9,7 +9,6 @@ function inspect(value) {
     colors: true,
     breakLength: 20,
   }));
-  return;
 }
 
 exports.lastModified = lastModified;
