@@ -31,6 +31,6 @@ because apart from structure the tree contains information about location of the
 node in the source code (offset in source along with line/column numbers); this
 is useful for reporting semantical errors, such as mismatched types.
 
-We can inspect the tree generated for program with `node d-show-tree.js <file>`.
+We can inspect the tree generated for program with `node d-inspect.js -P <file>`.
 (Files starting with `d-`, as in **d**iagnostic, offer insight to some internal
 structures used by the compiler).
