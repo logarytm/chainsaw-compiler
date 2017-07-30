@@ -10,25 +10,39 @@
   const left = Symbol('left');
   const right = Symbol('right');
 
-  const operators = {
-    '+': { associativity: left },
-    '-': { associativity: left },
-    '*': { associativity: left },
+  const binaryOperators = {
+    '*': { associativity: left, precedence: 60 },
+    '/': { associativity: left, precedence: 60 },
+    '&': { associativity: left, precedence: 60 },
+    'mod': { associativity: left, precedence: 60 },
 
-    '=': { associativity: right },
+    '+': { associativity: left, precedence: 50 },
+    '-': { associativity: left, precedence: 50 },
+    '|': { associativity: left, precedence: 50 },
 
-    '==': { associativity: left },
-    '!=': { associativity: left },
+    '==': { associativity: left, precedence: 30 },
+    '!=': { associativity: left, precedence: 30 },
+    '<':  { associativity: left, precedence: 30 },
+    '>':  { associativity: left, precedence: 30 },
+    '<=': { associativity: left, precedence: 30 },
+    '>=': { associativity: left, precedence: 30 },
 
-    'or': { associativity: left },
+    'and': { associativity: left, precedence: 20 },
+    'or': { associativity: left, precedence: 10 },
+
+    '=': { associativity: right, precedence: 0 },
   };
 
   function isLeftAssociative(operator) {
-    return operators[operator].associativity === left;
+    return binaryOperators[operator].associativity === left;
   }
 
   function isRightAssociative(operator) {
-    return operators[operator].associativity === right;
+    return binaryOperators[operator].associativity === right;
+  }
+
+  function precedenceOf(operator) {
+    return binaryOperators[operator].precedence;
   }
 
   function nth(index) {
@@ -69,17 +83,23 @@
       };
     });
 
-    function collect(lhs) {
+    function collect(lhs, minPrecedence) {
       let operator, rhs;
 
-      if (!tail.length) {
-        return head;
-      }
+      while (tail.length && precedenceOf(tail[0].operator) >= minPrecedence) {
+        const tmp = tail.shift();
+        operator = tmp.operator;
+        rhs = tmp.rhs;
 
-      while (tail.length) {
-        const tmp = tail.shift(); operator = tmp.operator, rhs = tmp.rhs;
-        while (tail.length && isRightAssociative(tail[0].operator)) {
-          rhs = collect(rhs);
+        let lookahead = tail[0];
+        while (
+          tail.length &&
+          (precedenceOf(lookahead.operator) > precedenceOf(operator) ||
+           isRightAssociative(lookahead.operator) &&
+           precedenceOf(lookahead.operator) === precedenceOf(operator))
+        ) {
+          rhs = collect(rhs, precedenceOf(lookahead.operator));
+          lookahead = tail[0];
         }
 
         lhs = tree.BinaryOperator({
@@ -92,7 +112,7 @@
       return lhs;
     }
 
-    return collect(head);
+    return collect(head, 0);
   }
 }
 
@@ -152,20 +172,20 @@ Type
   { return tree.NamedType({ name }); }
 
 Expression
-  = alternative: Alternative
-  { return alternative; }
+  = binaryOperator: BinaryOperator
+  { return binaryOperator; }
 
-Alternative
-  = head: Comparative tail: (_ AlternativeOperator _ Comparative)*
-  { return operatorsToTree({ head, tail }); }
-
-Comparative
-  = head: Primary tail: (_ ComparisonOperator _ Primary)*
+BinaryOperator
+  = head: Primary tail: (_ BinaryToken _ Primary)*
   { return operatorsToTree({ head, tail }); }
 
 Primary
-  = application: FunctionApplication
+  = "(" _ expression: Expression _ ")"
+  { return expression; }
+  / application: FunctionApplication
   { return application; }
+  / operator: UnaryToken _ operand: Primary
+  { return tree.UnaryOperator({ operator, operand }); }
   / identifier: Identifier
   { return identifier; }
   / number: Number
@@ -212,8 +232,15 @@ __
   = WhiteSpace
 
 FunctionToken = "fn"
-ComparisonOperator = '==' / '!=' / '<=' / '>=' / '<' / '>'
-AlternativeOperator = 'or'
+UnaryToken = '+' / '-' / '~' / 'not'
+
+BinaryToken
+  = '*' / '/' / 'mod' / '&'
+  / '+' / '-' / '|'
+  / '==' / '!=' / '<=' / '>=' / '<' / '>'
+  / 'and'
+  / 'or'
+  / '='
 
 Digits
   = digits: [0-9_]+
