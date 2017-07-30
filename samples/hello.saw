@@ -1,3 +1,3 @@
-fn hello() array(0x1_00)!int16 {
-  print(foo, bar, baz);
+fn hello(foo pointer!int32) array(0x1_00)!int16 {
+  print(foo == bar != baz or baz, baz);
 }

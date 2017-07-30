@@ -7,8 +7,36 @@
     },
   });
 
+  const left = Symbol('left');
+  const right = Symbol('right');
+
+  const operators = {
+    '+': { associativity: left },
+    '-': { associativity: left },
+    '*': { associativity: left },
+
+    '=': { associativity: right },
+
+    '==': { associativity: left },
+    '!=': { associativity: left },
+
+    'or': { associativity: left },
+  };
+
+  function isLeftAssociative(operator) {
+    return operators[operator].associativity === left;
+  }
+
+  function isRightAssociative(operator) {
+    return operators[operator].associativity === right;
+  }
+
   function nth(index) {
     return (element) => element[index];
+  }
+
+  function value(v) {
+    return () => v;
   }
 
   function toString(characters) {
@@ -33,18 +61,39 @@
     return parseInt(s.replace(/_/g, ''), base);
   }
 
-  const openingParenthesis = '(';
-  const closingParenthesis = ')';
+  function operatorsToTree({ head, tail }) {
+    tail = tail.map((element) => {
+      return {
+        operator: element[1],
+        rhs: element[3],
+      };
+    });
 
-  const left = Symbol('left');
-  const right = Symbol('right');
+    function collect(lhs) {
+      let operator, rhs;
 
-  const operators = {
-    '+': { associativity: left, precedence: 3 },
-    '-': { associativity: left, precedence: 3 },
-    '*': { associativity: left, precedence: 2 },
-    '=': { associativity: right, precedence: 10 },
-  };
+      if (!tail.length) {
+        return head;
+      }
+
+      while (tail.length) {
+        const tmp = tail.shift(); operator = tmp.operator, rhs = tmp.rhs;
+        while (tail.length && isRightAssociative(tail[0].operator)) {
+          rhs = collect(rhs);
+        }
+
+        lhs = tree.BinaryOperator({
+          lhs,
+          operator,
+          rhs,
+        });
+      }
+
+      return lhs;
+    }
+
+    return collect(head);
+  }
 }
 
 Program
@@ -71,7 +120,12 @@ FunctionDefinition
   }
 
 ParameterList
-  = "(" _ ")" { return []; }
+  = "(" _ head: NameTypePair tail: (_ "," _ NameTypePair)* _ ")" _
+  { return [head].concat(tail.map(nth(3))); }
+
+NameTypePair
+  = name: Identifier __ type: Type
+  { return { name, type }; }
 
 Body
   = "{" _ statements: Statement* "}"
@@ -98,6 +152,18 @@ Type
   { return tree.NamedType({ name }); }
 
 Expression
+  = alternative: Alternative
+  { return alternative; }
+
+Alternative
+  = head: Comparative tail: (_ AlternativeOperator _ Comparative)*
+  { return operatorsToTree({ head, tail }); }
+
+Comparative
+  = head: Primary tail: (_ ComparisonOperator _ Primary)*
+  { return operatorsToTree({ head, tail }); }
+
+Primary
   = application: FunctionApplication
   { return application; }
   / identifier: Identifier
@@ -109,7 +175,7 @@ FunctionApplication
   = name: Identifier _ args: ArgumentList
   {
     return tree.FunctionApplication({
-      name: name.name,
+      name: String(name),
       args,
     });
   }
@@ -120,7 +186,12 @@ ArgumentList
 
 Identifier "identifier"
   = name: ([a-zA-Z][a-zA-Z0-9'-]*)
-  { return tree.Identifier({ name: toString(name) }); }
+  {
+    return tree.Identifier({
+      name: toString(name),
+      toString: value(toString(name)),
+    });
+  }
 
 Number
   = "0x" digits: HexadecimalDigits
@@ -141,6 +212,8 @@ __
   = WhiteSpace
 
 FunctionToken = "fn"
+ComparisonOperator = '==' / '!=' / '<=' / '>=' / '<' / '>'
+AlternativeOperator = 'or'
 
 Digits
   = digits: [0-9_]+

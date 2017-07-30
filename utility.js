@@ -1,5 +1,6 @@
 const fs = require('fs');
 const util = require('util');
+const winston = require('winston');
 
 exports.inspect = inspect;
 function inspect(value) {
@@ -18,3 +19,11 @@ function lastModified(fileName) {
 
 exports.readFile = (path) => fs.readFileSync(path, 'utf8');
 exports.writeFile = fs.writeFileSync;
+
+exports.showSyntaxError = showSyntaxError;
+function showSyntaxError(error) {
+  winston.error(`at line ${error.location.start.line}: ${error.message}`);
+  if (global.debugMode) {
+    inspect(error);
+  }
+}
