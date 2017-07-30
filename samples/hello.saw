@@ -1,3 +1,3 @@
 fn hello(foo pointer!int32) array(0x1_00)!int16 {
-  (a + b) * c;
+  -(a + b) * c;
 }

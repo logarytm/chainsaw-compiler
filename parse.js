@@ -1,8 +1,13 @@
 const winston = require('winston');
-const fs = require('fs');
 const peg = require('pegjs');
 
-const { readFile, writeFile, lastModified, inspect, showSyntaxError } = require('./utility');
+const {
+  readFile,
+  writeFile,
+  inspect,
+  showSyntaxError,
+  isOutOfDate,
+} = require('./utility');
 
 const outputFileName = `${__dirname}/parse-generated.js`;
 const grammarFileName = `${__dirname}/parse.pegjs`;
@@ -27,17 +32,28 @@ function regenerate() {
   writeFile(outputFileName, source);
 }
 
-let stale = false;
-try {
-  if (lastModified(grammarFileName) > lastModified(outputFileName)) {
-    stale = true;
-  }
-} catch (e) {
-  stale = true;
-}
-
-if (stale) {
+if (isOutOfDate(grammarFileName, outputFileName)) {
   regenerate();
 }
 
-module.exports = require(outputFileName).parse;
+const parse = require(outputFileName).parse;
+
+exports.parse = parse;
+exports.parseFile = parseFile;
+
+function parseFile(fileName) {
+  return parse(readFile(fileName));
+}
+
+exports.isSyntaxError = isSyntaxError;
+function isSyntaxError(error) {
+  return error.name === 'SyntaxError';
+}
+
+exports.showSyntaxError = showSyntaxError;
+function showSyntaxError(error) {
+  winston.error(`at line ${error.location.start.line}: ${error.message}`);
+  if (global.debugMode) {
+    inspect(error);
+  }
+}

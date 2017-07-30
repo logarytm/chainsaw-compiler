@@ -1,5 +1,5 @@
 const winston = require('winston');
-const { inspect, readFile } = require('./utility.js');
+const { inspect } = require('./utility.js');
 
 const cli = require('meow')(`
   Usage
@@ -16,20 +16,16 @@ if (!cli.input.length) {
 }
 
 const debugMode = global.debugMode = cli.flags.debug;
-const filename = cli.input[0];
-const parse = require('./parse.js');
+const fileName = cli.input[0];
+const { showSyntaxError, isSyntaxError, parseFile } = require('./parse.js');
 
 try {
-  inspect(parse(readFile(filename)));
+  inspect(parseFile(fileName));
 } catch (error) {
-  if (!isSyntaxError(error)) throw error;
-  winston.error(`at ${filename}:${error.location.start.line}: ${error.message}`);
-  if (debugMode) {
-    inspect(error);
+  if (!isSyntaxError(error)) {
+    throw error;
   }
+  showSyntaxError(error);
   process.exit(1);
 }
 
-function isSyntaxError(error) {
-  return error.name === 'SyntaxError';
-}

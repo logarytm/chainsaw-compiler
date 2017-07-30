@@ -17,13 +17,14 @@ function lastModified(fileName) {
   return fs.statSync(fileName).mtime;
 }
 
-exports.readFile = (path) => fs.readFileSync(path, 'utf8');
+exports.readFile = (fileName) => fs.readFileSync(fileName, 'utf8');
 exports.writeFile = fs.writeFileSync;
 
-exports.showSyntaxError = showSyntaxError;
-function showSyntaxError(error) {
-  winston.error(`at line ${error.location.start.line}: ${error.message}`);
-  if (global.debugMode) {
-    inspect(error);
+exports.isOutOfDate = isOutOfDate;
+function isOutOfDate(prerequisiteFileName, targetFileName) {
+  try {
+    return lastModified(prerequisiteFileName) > lastModified(targetFileName);
+  } catch (error) {
+    return true;
   }
 }
