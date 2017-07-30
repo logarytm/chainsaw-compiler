@@ -23,12 +23,15 @@
   const binaryOperators = {
     '*': { associativity: left, precedence: 60 },
     '/': { associativity: left, precedence: 60 },
-    '&': { associativity: left, precedence: 60 },
     'mod': { associativity: left, precedence: 60 },
 
     '+': { associativity: left, precedence: 50 },
     '-': { associativity: left, precedence: 50 },
     '|': { associativity: left, precedence: 50 },
+    '&': { associativity: left, precedence: 50 },
+
+    'shl': { associativity: left, precedence: 40 },
+    'shr': { associativity: left, precedence: 40 },
 
     '==': { associativity: left, precedence: 30 },
     '!=': { associativity: left, precedence: 30 },
@@ -353,8 +356,9 @@ LoopingKeyword = "while" / "until"
 UnaryToken = "+" / "-" / "~" / "not"
 
 BinaryToken
-  = "*" / "/" / "mod" / "&"
-  / "+" / "-" / "|"
+  = "*" / "/" / "mod"
+  / "+" / "-" / "|" / "&"
+  / "shl" / "shr"
   / "==" / "!=" / "<=" / ">=" / "<" / ">"
   / "and"
   / "or"
