@@ -2,7 +2,10 @@
   const tree = new Proxy({}, {
     get(target, kind, receiver) {
       return (extra = {}) => {
-        return Object.assign({ kind }, extra);
+        return Object.assign({
+          kind,
+          location: location(),
+        }, extra);
       };
     },
   });
