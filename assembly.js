@@ -104,6 +104,10 @@ class AssemblyWriter {
     }
 
     optimize() {
+        if (this.output.length === 0) {
+            return;
+        }
+
         this.optimizeSpuriousSaves();
     }
 

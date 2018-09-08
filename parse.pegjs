@@ -29,7 +29,7 @@
             return (extra = {}) => {
                 return makeNode(Object.assign({
                     kind,
-                    location: location(),
+                    // location: location(),
                 }, extra));
             };
         },
@@ -191,12 +191,27 @@ TopLevelStatement
     / definition: FunctionDefinition
     { return definition; }
 
+FunctionDeclaration
+    = "fn" _
+        functionName: Identifier _
+        parameters: ParameterList _
+        returnType: Type _
+        StatementTerminator _
+    {
+        return tree.FunctionDeclaration({
+            functionName: String(functionName),
+            parameters,
+            returnType,
+            body,
+        });
+    }
+
 FunctionDefinition
     = "fn" _
         functionName: Identifier _
         parameters: ParameterList _
         returnType: Type _
-        body: FunctionBody
+        body: FunctionBody _
     {
         return tree.FunctionDefinition({
             functionName: String(functionName),
@@ -297,15 +312,37 @@ Expression
     { return binaryOperator; }
 
 BinaryOperator
-    = head: Primary tail: (_ BinaryToken _ Primary)*
+    = head: PrimaryExpression tail: (_ BinaryToken _ PrimaryExpression)*
     { return operatorsToTree({ head, tail }); }
 
-Primary
+PrimaryExpression
+    = original: SecondaryExpression
+      followups: SecondaryExpressionFollowup*
+    {
+        let expression = original;
+        for (let followup of followups) {
+            if (followup.kind === 'ArrayDereference') {
+                followup = tree.ArrayDereference({
+                    array: expression,
+                    offset: followup.offset,
+                });
+            } else if (followup.kind === 'FunctionApplication') {
+                followup = tree.FunctionApplication({
+                    function: expression,
+                    args: followup.args,
+                });
+            }
+
+            expression = followup;
+        }
+
+        return expression;
+    }
+
+SecondaryExpression
     = "(" _ expression: Expression _ ")"
     { return expression; }
-    / application: FunctionApplication
-    { return application; }
-    / operator: UnaryToken _ operand: Primary
+    / operator: UnaryToken _ operand: PrimaryExpression
     { return tree.UnaryOperator({ operator, operand }); }
     / identifier: Identifier
     { return identifier; }
@@ -314,14 +351,11 @@ Primary
     / string: String
     { return string; }
 
-FunctionApplication
-    = functionName: Identifier _ args: ArgumentList
-    {
-        return tree.FunctionApplication({
-            functionName: String(functionName),
-            args,
-        });
-    }
+SecondaryExpressionFollowup
+    = args: ArgumentList
+    { return tree.FunctionApplication({ args }); }
+    / "[" _ offset: PrimaryExpression "]"
+    { return tree.ArrayDereference({ offset }); }
 
 ArgumentList
     = "(" _ ")"
@@ -330,7 +364,7 @@ ArgumentList
     { return [head].concat(tail.map(nth(3))); }
 
 Identifier "identifier"
-    = name: ([a-zA-Z][a-zA-Z0-9"-]*)
+    = name: ([a-zA-Z][a-zA-Z0-9_-]*)
     {
         name = toString(name);
         checkNotReserved(name);
