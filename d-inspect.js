@@ -17,7 +17,7 @@ if (!cli.input.length) {
 
 global.debugMode = cli.flags.debug;
 const filename = cli.input[0];
-const { showSyntaxError, isSyntaxError, parseFile } = require('./parse.js');
+const { showCompileError, isCompileError, parseFile } = require('./parse.js');
 
 function main() {
     const parseTree = parseFile(filename);
@@ -28,10 +28,10 @@ function main() {
 try {
     main();
 } catch (error) {
-    if (!isSyntaxError(error)) {
+    if (!isCompileError(error)) {
         throw error;
     }
-    showSyntaxError(error);
+    showCompileError(error);
     process.exit(1);
 }
 

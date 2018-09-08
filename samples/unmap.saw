@@ -1,13 +1,17 @@
 /* derp */
 
-fn unmap_range(start pword, size word) void {
+fn unmap_page(addr pword, n word) pword;
+fn ptes(addr pword) pword;
+fn free_frame(addr pword) void;
+
+fn unmap_range(start /* page */ pword, size word) void {
     var message str = "hello, world";
     var i word = 0;
     var frame_allocated word;
     var physical pword;
     var e pword;
     while i < size {
-        e = ptes(start + 1);
+        e = ptes(start + i);
         if e[0] == 0xf {
             frame_allocated = true;
             if under(e)[3] & 4 {
@@ -18,7 +22,6 @@ fn unmap_range(start pword, size word) void {
                 free_frame(physical);
             }
         }
-
         i = i + 0x1000;
     }
 }

@@ -186,8 +186,8 @@ Program
     { return statements.map(nth(0)).filter(notEmpty); }
 
 TopLevelStatement
-    = Comment
-    { }
+    = declaration: FunctionDeclaration
+    { return declaration; }
     / definition: FunctionDefinition
     { return definition; }
 
@@ -202,7 +202,6 @@ FunctionDeclaration
             functionName: String(functionName),
             parameters,
             returnType,
-            body,
         });
     }
 
@@ -222,7 +221,7 @@ FunctionDefinition
     }
 
 ParameterList
-    = "(" _ ")"
+    = "(" _ ")" _
     { return []; }
     / "(" _ head: NameTypePair tail: (_ "," _ NameTypePair)* _ ")" _
     { return [head].concat(tail.map(nth(3))); }
@@ -404,19 +403,19 @@ StringCharacter
     / c: [^"]
     { return c; }
 
-WhiteSpace "white space"
+Whitespace "white space"
     = ([ \n\r\t]+)
     { }
 
 Comment
     = "/*" (!"*/" .)* "*/"
-    { }
 
 _
     = __?
 
 __
-    = WhiteSpace
+    = ([ \n\r\t]*) Comment ([ \n\r\t]*)
+    / Whitespace
 
 ConditionalKeyword = "if" / "unless"
 LoopingKeyword = "while" / "until"
