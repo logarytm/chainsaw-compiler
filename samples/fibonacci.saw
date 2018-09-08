@@ -1,5 +1,5 @@
 /* calculates fibonacci sequence */
-fn fibonacci(n int32) int32 {
+fn fibonacci(n word) word {
 	/* termination */
 	if n == 0 or n == 1 {
 		return 1;

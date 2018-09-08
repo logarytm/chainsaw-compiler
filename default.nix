@@ -1,7 +1,7 @@
 with import <nixpkgs> { };
 
 stdenv.mkDerivation rec {
-  name = "www";
+  name = "compiler";
 
   buildInputs = [
     nodejs

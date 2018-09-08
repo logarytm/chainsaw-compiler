@@ -2,42 +2,36 @@ const winston = require('winston');
 const { inspect } = require('./utility.js');
 
 const cli = require('meow')(`
-  Usage
-    $ node d-inspect.js <file> [--debug] -P | -I
+    Usage
+        $ node d-inspect.js <file> [--debug]
 `, {
-  alias: {
-    P: 'parseTree',
-    I: 'intermediate',
-    d: 'debug',
-  },
+    alias: {
+        d: 'debug',
+    },
 });
 
 if (!cli.input.length) {
-  console.error('error: no input files');
-  process.exit(1);
+    console.error('error: no input files');
+    process.exit(1);
 }
 
-const debugMode = global.debugMode = cli.flags.debug;
-const fileName = cli.input[0];
+global.debugMode = cli.flags.debug;
+const filename = cli.input[0];
 const { showSyntaxError, isSyntaxError, parseFile } = require('./parse.js');
 
 function main() {
-  const parseTree = parseFile(fileName);
+    const parseTree = parseFile(filename);
 
-  if (cli.flags.parseTree) {
     inspect(parseTree);
-  } else {
-    winston.error('you must provide -P or -I');
-  }
 }
 
 try {
-  main();
+    main();
 } catch (error) {
-  if (!isSyntaxError(error)) {
-    throw error;
-  }
-  showSyntaxError(error);
-  process.exit(1);
+    if (!isSyntaxError(error)) {
+        throw error;
+    }
+    showSyntaxError(error);
+    process.exit(1);
 }
 

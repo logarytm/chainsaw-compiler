@@ -2,57 +2,64 @@ const winston = require('winston');
 const peg = require('pegjs');
 
 const {
-  readFile,
-  writeFile,
-  inspect,
-  isOutOfDate,
+    readFile,
+    writeFile,
+    inspect,
+    isOutOfDate,
+    showLocation,
 } = require('./utility');
 
-const outputFileName = `${__dirname}/parse-generated.js`;
+const outputFilename = `${__dirname}/parse-generated.js`;
 const grammarFileName = `${__dirname}/parse.pegjs`;
 
 function regenerate() {
-  winston.info('parser not found or stale, regenerating');
+    winston.info('parser not found or stale, regenerating');
 
-  let source = null;
-  let startTime = new Date();
-  try {
-    source = peg.generate(readFile(grammarFileName), {
-      output: 'source',
-      format: 'commonjs',
+    let source = null;
+    try {
+        source = peg.generate(readFile(grammarFileName), {
+            output: 'source',
+            format: 'commonjs',
+            trace: true,
+        });
+    } catch (error) {
+        winston.error('during parser generation:');
+        showSyntaxError(error);
+        process.exit(1);
+    }
+
+    winston.info(`parser regenerated`);
+    writeFile(outputFilename, source);
+}
+
+if (isOutOfDate(grammarFileName, outputFilename)) {
+    regenerate();
+}
+
+const parse = require(outputFilename).parse;
+
+function parseFile(filename) {
+    return parse(readFile(filename), {
+        tracer: {
+            trace(e) {
+                // noop
+            },
+        }
     });
-  } catch (error) {
-    winston.error('during parser generation:');
-    showSyntaxError(error);
-    process.exit(1);
-  }
-
-  winston.info(`parser regenerated`);
-  writeFile(outputFileName, source);
 }
 
-if (isOutOfDate(grammarFileName, outputFileName)) {
-  regenerate();
+function isSyntaxError(error) {
+    return error.name === 'SyntaxError' || error.constructor.name === 'SyntaxError';
 }
 
-const parse = require(outputFileName).parse;
+function showSyntaxError(error) {
+    console.error(`error: at ${showLocation(error.location)}: ${error.message}`);
+    if (global.debugMode) {
+        inspect(error);
+    }
+}
 
 exports.parse = parse;
 exports.parseFile = parseFile;
-
-function parseFile(fileName) {
-  return parse(readFile(fileName));
-}
-
 exports.isSyntaxError = isSyntaxError;
-function isSyntaxError(error) {
-  return error.name === 'SyntaxError';
-}
-
 exports.showSyntaxError = showSyntaxError;
-function showSyntaxError(error) {
-  winston.error(`at line ${error.location.start.line}: ${error.message}`);
-  if (global.debugMode) {
-    inspect(error);
-  }
-}
