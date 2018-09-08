@@ -4,6 +4,9 @@ const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.j
 const { CompileError, showLocation, inspect } = require('./utility.js');
 const { registers, RegisterAllocator } = require('./register.js');
 
+const VARIABLE = Symbol('variable');
+const FUNCTION = Symbol('function');
+
 function generateCode(topLevelStatements, writer) {
     function preserveRegister(register, fn) {
         writer.push(registers.ax);
@@ -16,22 +19,35 @@ function generateCode(topLevelStatements, writer) {
     const stack = [];
     const rootScope = new Scope();
 
-    function generateFunctionDefinition(definition, state) {
-        checkNodeKind(definition, ['FunctionDefinition']);
+    function generateFunctionDeclinition(declinition, state) {
+        checkNodeKind(declinition, ['FunctionDefinition', 'FunctionDeclaration']);
 
-        const functionName = definition.functionName;
-        const label = writer.labelHere(functionName);
-        state.scope.bind(functionName, label, redefinition(functionName));
+        const isDefinition = declinition.kind === 'FunctionDefinition';
+        const functionName = declinition.functionName;
+        const label = writer.prepareLabel(functionName);
+        state.scope.bind(functionName, {
+            label,
+            nature: FUNCTION,
+            arity: declinition.parameters.length,
+            parameters: declinition.parameters,
+            returnType: declinition.returnType,
+            hasReturnValue: !isVoidType(declinition.returnType),
+        }, redefinition(functionName));
 
         const parameterBindings = {};
-        for (const parameter of definition.parameters) {
+        for (const parameter of declinition.parameters) {
             parameterBindings[parameter.name] = {
                 label: writer.reserve(functionName + '$' + parameter.name),
                 name: parameter.name,
             };
         }
 
-        definition.body.statements.forEach(descend(generateStatement, state.extend({
+        if (!isDefinition) {
+            return;
+        }
+
+        writer.label(label);
+        declinition.body.statements.forEach(descend(generateStatement, state.extend({
             scope: state.scope.extend(parameterBindings),
             prefix: `${state.prefix}${functionName}$`,
         })));
@@ -40,6 +56,7 @@ function generateCode(topLevelStatements, writer) {
     function generateStatement(statement, state) {
         match(statement, {
             VariableDeclaration: descend(generateVariableDeclaration, state),
+            ConditionalStatement: descend(generateConditionalStatement, state),
             LoopingStatement: descend(generateLoopingStatement, state),
             ReturnStatement: descend(generateReturnStatement, state),
             ExpressionStatement: descend(generateExpressionStatement, state),
@@ -54,6 +71,21 @@ function generateCode(topLevelStatements, writer) {
         });
     }
 
+    function generateConditionalStatement(statement, state) {
+        const elseLabel = writer.prepareLabel();
+        const afterLabel = writer.prepareLabel();
+
+        state.callWithFreeRegister(predicateRegister => {
+            computeExpression(predicateRegister, statement.predicate, state);
+            writer.cmp(predicateRegister, predicateRegister);
+            writer.jz(elseLabel);
+            into(generateBody, statement.thenBranch, state);
+            writer.label(elseLabel);
+            into(generateBody, statement.elseBranch, state);
+            writer.label(afterLabel);
+        });
+    }
+
     function generateLoopingStatement(statement, state) {
         const start = writer.labelHere();
         const exit = writer.prepareLabel();
@@ -62,7 +94,8 @@ function generateCode(topLevelStatements, writer) {
             computeExpression(predicateRegister, statement.predicate, state);
             writer.cmp(predicateRegister, predicateRegister);
             writer.jz(exit);
-            into(generateBody, statement.doBody, state);
+            into(generateBody, statement.body, state);
+            writer.jmp(start);
             writer.label(exit);
         });
     }
@@ -75,7 +108,11 @@ function generateCode(topLevelStatements, writer) {
         const variableName = declaration.variableName;
         const label = writer.reserve(state.prefix + variableName);
 
-        state.scope.bind(variableName, { label, type: declaration.variableType });
+        state.scope.bind(variableName, {
+            label,
+            type: declaration.variableType,
+            nature: VARIABLE,
+        });
     }
 
     function generateReturnStatement(rs, state) {
@@ -85,6 +122,12 @@ function generateCode(topLevelStatements, writer) {
 
     function computeExpression(destinationRegister, expression, state = mandatory()) {
         match(expression, {
+            FunctionApplication(application) {
+            },
+
+            ArrayDereference(dereference) {
+            },
+
             UnaryOperator(operator) {
                 switch (operator.operator) {
                 case 'not':
@@ -95,22 +138,26 @@ function generateCode(topLevelStatements, writer) {
                     break;
 
                 default:
-                    throw new Error('unary operator not implemented');
+                    throw new Error(`Unary operator not implemented: ${operator.operator}.`);
                 }
             },
 
             BinaryOperator(operator) {
                 switch (operator.operator) {
 
-                case '<': {
-                    // TODO: refactor nested cWFR()
+                    //region Relational operators
+                case '<':
+                case '>': {
+                    // TODO(refactor): flatten register allocation
                     state.callWithFreeRegister(lhsRegister => {
+                        const copyFlag = { '<': 'ccf', '>': 'cof' }[operator.operator];
+
                         return state.callWithFreeRegister(rhsRegister => {
                             computeExpression(lhsRegister, operator.lhs, state);
                             computeExpression(rhsRegister, operator.rhs, state);
                             writer.cmp(lhsRegister, rhsRegister);
                             state.borrowRegister(registers.dx, () => {
-                                writer.ccf(destinationRegister);
+                                writer.opcode(copyFlag);
                                 writer.mov(destinationRegister, registers.dx);
                             });
                         })
@@ -118,55 +165,97 @@ function generateCode(topLevelStatements, writer) {
                     break;
                 }
 
+                case '==':
+                case '!=': {
+                    const shouldNegate = operator.operator === '!=';
+
+                    state.callWithFreeRegister(lhsRegister => {
+                        return state.callWithFreeRegister(rhsRegister => {
+                            computeExpression(lhsRegister, operator.lhs, state);
+                            computeExpression(rhsRegister, operator.rhs, state);
+                            writer.test(lhsRegister, rhsRegister);
+                            state.borrowRegister(registers.dx, () => {
+                                writer.czf();
+                                writer.mov(destinationRegister, registers.dx);
+                                if (shouldNegate) {
+                                    writer.not(destinationRegister);
+                                }
+                            });
+                        })
+                    });
+                    break;
+                }
+                    //endregion
+
+                    //region Assignment operator
                 case '=': {
-                    if (operator.lhs.kind !== 'Identifier') {
-                        throw new Error(`unsupported lvalue: ${operator.lhs.kind}`);
-                    }
+                    let lhsOperand = null;
 
-                    const identifier = operator.lhs;
-                    state.callWithFreeRegister(rhsRegister => {
-                        computeExpression(rhsRegister, operator.rhs, state);
-                        writer.mov(state.scope.lookup(identifier.name, () => {
+                    switch (operator.lhs.kind) {
+                    case 'Identifier': {
+                        const identifier = operator.lhs;
+                        lhsOperand = new Relative(state.scope.lookup(identifier.name, () => {
                             error(`${identifier.name} is not defined`);
-                        }).label, rhsRegister);
+                        }).label);
+                        break;
+                    }
+
+                    default: {
+                        throw new Error(`Unimplemented l-value kind: ${operator.lhs.kind}.`);
+                    }
+                    }
+
+                    state.callWithFreeRegister(rhsRegister => {
+                        computeExpression(rhsRegister, operator.rhs, state);
+                        writer.mov(lhsOperand, rhsRegister);
                     });
                     break;
                 }
+                    //endregion
 
-                case '*': {
-                    if (operator.lhs.kind !== 'Identifier') {
-                        throw new Error(`unsupported lvalue: ${operator.lhs.kind}`);
-                    }
+                    //region Arithmetic and bitwise operators
+                case '+':
+                case '-':
+                case '*':
+                case '/':
+                case '&': {
+                    const opcode = {
+                        '+': 'adc',
+                        '-': 'suc',
+                        '*': 'Smul6',
+                        '/': 'Sdiv6',
+                        '&': 'and',
+                    }[operator.operator];
 
                     state.callWithFreeRegister(rhsRegister => {
                         computeExpression(destinationRegister, operator.lhs, state);
                         computeExpression(rhsRegister, operator.rhs, state);
-                        writer.Smul6(destinationRegister, rhsRegister);
+                        writer.opcode(opcode, destinationRegister, rhsRegister);
                     });
                     break;
                 }
-
-                case '-': {
-                    if (operator.lhs.kind !== 'Identifier') {
-                        throw new Error(`unsupported lvalue: ${operator.lhs.kind}`);
-                    }
-
-                    state.callWithFreeRegister(rhsRegister => {
-                        computeExpression(destinationRegister, operator.lhs, state);
-                        computeExpression(rhsRegister, operator.rhs, state);
-                        writer.sub(destinationRegister, rhsRegister);
-                    });
-                    break;
-                }
+                    //endregion
 
                 default:
-                    throw new Error(`binary operator not implemented: "${operator.operator}"`);
+                    throw new Error(`Binary operator not implemented: ${operator.operator}.`);
                 }
             },
 
             Identifier({ name }) {
+                switch (name) {
+                case 'true': {
+                    writer.mov(destinationRegister, new Immediate(1));
+                    return;
+                }
+
+                case 'false': {
+                    writer.mov(destinationRegister, new Immediate(0));
+                    return;
+                }
+                }
+
                 writer.mov(destinationRegister, new Relative(state.scope.lookup(name, () => {
-                    fatal(`${name} is not defined`);
+                    fatal(`${name} is not defined.`);
                 }).label));
             },
 
@@ -182,7 +271,7 @@ function generateCode(topLevelStatements, writer) {
         },
     };
 
-    topLevelStatements.forEach(descend(generateFunctionDefinition, statePrototype.extend({
+    topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
         scope: rootScope,
         registerAllocator: new RegisterAllocator(writer),
         callWithFreeRegister(fn) {
@@ -193,6 +282,13 @@ function generateCode(topLevelStatements, writer) {
         },
         prefix: '',
     })));
+
+    //region Types
+    function isVoidType(type) {
+        return type.kind === 'NamedType' && type.name === 'void';
+    }
+
+    //endregion
 
     //region Error reporting
     function error(message) {
@@ -210,7 +306,7 @@ function generateCode(topLevelStatements, writer) {
         }
     }
 
-    function checkNodeKind(node, kinds, message = `expected ${kinds.join(' or ')}, got ${node.kind}`) {
+    function checkNodeKind(node, kinds, message = `Expected ${kinds.join(' or ')}, got ${node.kind}.`) {
         check(kinds.includes(node.kind), message);
     }
 

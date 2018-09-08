@@ -54,7 +54,7 @@ function isCompileError(error) {
 }
 
 function showCompileError(error) {
-    console.error(`error: ${error.message} at ${showLocation(error.location)}`);
+    console.error(`error: ${error.message} (at ${showLocation(error.location)})`);
     if (global.debugMode) {
         inspect(error);
     }

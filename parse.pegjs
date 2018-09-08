@@ -262,8 +262,8 @@ Statement
     { return tree.ReturnStatement({ expression }); }
     / keyword: ConditionalKeyword _
         predicate: Expression _
-        thenBody: Body _
-        elseBody: ("else" _ Body)?
+        thenBranch: Body _
+        elseBranch: ("else" _ Body)?
     {
         predicate = keyword === 'unless'
             ? tree.UnaryOperator({ operator: 'not', operand: predicate })
@@ -271,13 +271,13 @@ Statement
 
         return tree.ConditionalStatement({
             predicate,
-            thenBody,
-            elseBody: get(elseBody, 2, emptyBody),
+            thenBranch,
+            elseBranch: get(elseBranch, 2, emptyBody),
         });
     }
     / keyword: LoopingKeyword _
         predicate: Expression _
-        doBody: Body
+        body: Body
     {
         predicate = keyword === 'until'
             ? tree.UnaryOperator({ operator: 'not', operand: predicate })
@@ -285,7 +285,7 @@ Statement
 
         return tree.LoopingStatement({
             predicate,
-            doBody,
+            body,
         });
     }
     / expression: Expression _ StatementTerminator

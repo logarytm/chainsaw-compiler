@@ -56,8 +56,24 @@ class AssemblyWriter {
         this.opcode('cmp', lhs, rhs);
     }
 
+    test(lhs, rhs) {
+        this.opcode('test', lhs, rhs);
+    }
+
     ccf() {
         this.opcode('ccf');
+    }
+
+    cof() {
+        this.opcode('cof');
+    }
+
+    czf() {
+        this.opcode('czf');
+    }
+
+    jmp(label) {
+        this.opcode('jmp', label);
     }
 
     jz(label) {
@@ -67,7 +83,7 @@ class AssemblyWriter {
     sub(lhs, rhs) {
         this.opcode('sub', lhs, rhs);
     }
-    
+
     Smul6(lhs, rhs) {
         this.opcode('sys mul6', lhs, rhs);
     }
