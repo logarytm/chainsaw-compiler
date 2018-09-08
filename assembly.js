@@ -1,3 +1,5 @@
+const { inspect } = require('./utility.js');
+
 class AssemblyWriter {
     constructor() {
         this.output = [];
@@ -50,6 +52,28 @@ class AssemblyWriter {
         this.opcode('not', what);
     }
 
+    cmp(lhs, rhs) {
+        this.opcode('cmp', lhs, rhs);
+    }
+
+    ccf() {
+        this.opcode('ccf');
+    }
+
+    jz(label) {
+        this.opcode('jz', label);
+    }
+
+
+    sub(lhs, rhs) {
+        this.opcode('sub', lhs, rhs);
+    }
+
+
+    Smul6(lhs, rhs) {
+        this.opcode('sys mul6', lhs, rhs);
+    }
+
     dump() {
         this.output.forEach(line => {
             if (line instanceof LabelLine && line.label.name[0] !== 'L') {
@@ -78,6 +102,33 @@ class AssemblyWriter {
 
         return new Label(name);
     }
+
+    optimize() {
+        this.optimizeSpuriousSaves();
+    }
+
+    optimizeSpuriousSaves() {
+        const newOutput = [this.output[0]];
+
+        for (let i = 1; i < this.output.length; i++) {
+            const previousLine = this.output[i - 1];
+            const currentLine = this.output[i];
+
+            if (
+                previousLine instanceof OpcodeLine && currentLine instanceof OpcodeLine &&
+                previousLine.opcode === 'push' && currentLine.opcode === 'pop' &&
+                previousLine.operands[0] instanceof Register && currentLine.operands[0] instanceof Register &&
+                previousLine.operands[0].isEqualTo(currentLine.operands[0])
+            ) {
+                newOutput.pop();
+                continue;
+            }
+
+            newOutput.push(currentLine);
+        }
+
+        this.output = newOutput;
+    }
 }
 
 class LabelLine {
@@ -92,12 +143,12 @@ class LabelLine {
 
 class OpcodeLine {
     constructor(opcode, operands) {
-        this.opcode = opcode;
+        this.opcode = opcode.toLowerCase();
         this.operands = operands;
     }
 
     format() {
-        return `    ${this.opcode.toUpperCase()} ${this.operands.map(x => x.format()).join(',')}`;
+        return '    ' + `${this.opcode} ${this.operands.map(x => x.format()).join(', ')}`.trim();
     }
 }
 
@@ -125,6 +176,10 @@ class Register extends Operand {
     format() {
         return `${this.expression}`;
     }
+
+    isEqualTo(r) {
+        return this.expression === r.expression;
+    }
 }
 
 class Immediate extends Operand {
@@ -135,13 +190,13 @@ class Immediate extends Operand {
 
 class Absolute extends Operand {
     format() {
-        return `<${this.expression}>`;
+        return `<${this.expression.format()}>`;
     }
 }
 
 class Relative extends Operand {
     format() {
-        return `[${this.expression}]`;
+        return `[${this.expression.format()}]`;
     }
 }
 

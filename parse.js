@@ -24,7 +24,7 @@ function regenerate() {
         });
     } catch (error) {
         winston.error('during parser generation:');
-        showSyntaxError(error);
+        showCompileError(error);
         process.exit(1);
     }
 
@@ -48,12 +48,13 @@ function parseFile(filename) {
     });
 }
 
-function isSyntaxError(error) {
-    return error.name === 'SyntaxError' || error.constructor.name === 'SyntaxError';
+function isCompileError(error) {
+    return error.name === 'SyntaxError' || error.constructor.name === 'SyntaxError'
+        || error.constructor.name === 'CompileError';
 }
 
-function showSyntaxError(error) {
-    console.error(`error: at ${showLocation(error.location)}: ${error.message}`);
+function showCompileError(error) {
+    console.error(`error: ${error.message} at ${showLocation(error.location)}`);
     if (global.debugMode) {
         inspect(error);
     }
@@ -61,5 +62,5 @@ function showSyntaxError(error) {
 
 exports.parse = parse;
 exports.parseFile = parseFile;
-exports.isSyntaxError = isSyntaxError;
-exports.showSyntaxError = showSyntaxError;
+exports.isCompileError = isCompileError;
+exports.showCompileError = showCompileError;

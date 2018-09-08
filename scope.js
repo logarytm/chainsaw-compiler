@@ -24,8 +24,11 @@ class Scope {
         this.bindings[name] = binding;
     }
 
-    extend() {
-        return new Scope(this);
+    extend(newBindings = {}) {
+        const childScope = new Scope(this);
+        childScope.bindings = newBindings;
+
+        return childScope;
     }
 }
 

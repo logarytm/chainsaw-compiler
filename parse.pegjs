@@ -2,6 +2,11 @@
     function makeNode(node) {
         return new Proxy(node, {
             get(target, prop) {
+                // special case for util.inspect() and console.log() to work
+                if (prop === 'inspect') {
+                    return undefined;
+                }
+
                 if (typeof prop !== 'symbol' && !(prop in target)) {
                     throw new Error(`${target.kind} has no property named ${prop}`);
                 }

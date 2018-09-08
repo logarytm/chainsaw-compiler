@@ -1,6 +1,13 @@
 const fs = require('fs');
 const util = require('util');
 
+class CompileError extends Error {
+    constructor(message, location) {
+        super(message);
+        this.location = location;
+    }
+}
+
 function inspect(value) {
     console.log(util.inspect(value, {
         showHidden: false,
@@ -26,6 +33,7 @@ function showLocation(location) {
     return `${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
 }
 
+exports.CompileError = CompileError;
 exports.readFile = (filename) => fs.readFileSync(filename, 'utf8');
 exports.writeFile = fs.writeFileSync;
 exports.lastModified = lastModified;

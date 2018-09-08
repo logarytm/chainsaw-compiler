@@ -1,14 +1,8 @@
 const R = require('ramda');
 const { Scope } = require('./scope.js');
 const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
-const { showLocation, inspect } = require('./utility.js');
-
-const registers = {
-    ax: new Register('AX'),
-    bx: new Register('BX'),
-    cx: new Register('CX'),
-    dx: new Register('DX'),
-};
+const { CompileError, showLocation, inspect } = require('./utility.js');
+const { registers, RegisterAllocator } = require('./register.js');
 
 function generateCode(topLevelStatements, writer) {
     function preserveRegister(register, fn) {
@@ -29,8 +23,16 @@ function generateCode(topLevelStatements, writer) {
         const label = writer.labelHere(functionName);
         state.scope.bind(functionName, label, redefinition(functionName));
 
+        const parameterBindings = {};
+        for (const parameter of definition.parameters) {
+            parameterBindings[parameter.name] = {
+                label: writer.reserve(functionName + '$' + parameter.name),
+                name: parameter.name,
+            };
+        }
+
         definition.body.statements.forEach(descend(generateStatement, state.extend({
-            scope: state.scope.extend(),
+            scope: state.scope.extend(parameterBindings),
             prefix: `${state.prefix}${functionName}$`,
         })));
     }
@@ -40,11 +42,15 @@ function generateCode(topLevelStatements, writer) {
             VariableDeclaration: descend(generateVariableDeclaration, state),
             LoopingStatement: descend(generateLoopingStatement, state),
             ReturnStatement: descend(generateReturnStatement, state),
-            ExpressionStatement: descend(
-                R.compose(
-                    R.partial(computeExpression, [registers.ax]),
-                    node => node.expression,
-                ), state),
+            ExpressionStatement: descend(generateExpressionStatement, state),
+        });
+    }
+
+    function generateExpressionStatement(statement, state) {
+        const expression = statement.expression;
+        state.callWithFreeRegister(register => {
+            // TODO(optimize): omit calculation if expression has no side effects
+            computeExpression(register, expression, state);
         });
     }
 
@@ -52,9 +58,13 @@ function generateCode(topLevelStatements, writer) {
         const start = writer.labelHere();
         const exit = writer.prepareLabel();
 
-        computeExpression(registers.ax, statement.predicate, state);
-        into(generateBody, statement.doBody, state);
-        writer.label(exit);
+        state.callWithFreeRegister(predicateRegister => {
+            computeExpression(predicateRegister, statement.predicate, state);
+            writer.cmp(predicateRegister, predicateRegister);
+            writer.jz(exit);
+            into(generateBody, statement.doBody, state);
+            writer.label(exit);
+        });
     }
 
     function generateBody(body, state) {
@@ -73,12 +83,15 @@ function generateCode(topLevelStatements, writer) {
         writer.ret();
     }
 
-    function computeExpression(destinationRegister, expression, state) {
+    function computeExpression(destinationRegister, expression, state = mandatory()) {
         match(expression, {
             UnaryOperator(operator) {
                 switch (operator.operator) {
                 case 'not':
-                    writer.not(destinationRegister);
+                    state.borrowRegister(destinationRegister, () => {
+                        computeExpression(destinationRegister, operator.operand, state);
+                        writer.not(destinationRegister);
+                    });
                     break;
 
                 default:
@@ -87,17 +100,79 @@ function generateCode(topLevelStatements, writer) {
             },
 
             BinaryOperator(operator) {
+                switch (operator.operator) {
+
+                case '<': {
+                    // TODO: refactor nested cWFR()
+                    state.callWithFreeRegister(lhsRegister => {
+                        return state.callWithFreeRegister(rhsRegister => {
+                            computeExpression(lhsRegister, operator.lhs, state);
+                            computeExpression(rhsRegister, operator.rhs, state);
+                            writer.cmp(lhsRegister, rhsRegister);
+                            state.borrowRegister(registers.dx, () => {
+                                writer.ccf(destinationRegister);
+                                writer.mov(destinationRegister, registers.dx);
+                            });
+                        })
+                    });
+                    break;
+                }
+
+                case '=': {
+                    if (operator.lhs.kind !== 'Identifier') {
+                        throw new Error(`unsupported lvalue: ${operator.lhs.kind}`);
+                    }
+
+                    const identifier = operator.lhs;
+                    state.callWithFreeRegister(rhsRegister => {
+                        computeExpression(rhsRegister, operator.rhs, state);
+                        writer.mov(state.scope.lookup(identifier.name, () => {
+                            error(`${identifier.name} is not defined`);
+                        }).label, rhsRegister);
+                    });
+                    break;
+                }
+
+                case '*': {
+                    if (operator.lhs.kind !== 'Identifier') {
+                        throw new Error(`unsupported lvalue: ${operator.lhs.kind}`);
+                    }
+
+                    state.callWithFreeRegister(rhsRegister => {
+                        computeExpression(destinationRegister, operator.lhs, state);
+                        computeExpression(rhsRegister, operator.rhs, state);
+                        writer.Smul6(destinationRegister, rhsRegister);
+                    });
+                    break;
+                }
+
+                case '-': {
+                    if (operator.lhs.kind !== 'Identifier') {
+                        throw new Error(`unsupported lvalue: ${operator.lhs.kind}`);
+                    }
+
+                    state.callWithFreeRegister(rhsRegister => {
+                        computeExpression(destinationRegister, operator.lhs, state);
+                        computeExpression(rhsRegister, operator.rhs, state);
+                        writer.sub(destinationRegister, rhsRegister);
+                    });
+                    break;
+                }
+
+                default:
+                    throw new Error(`binary operator not implemented: "${operator.operator}"`);
+                }
             },
 
             Identifier({ name }) {
-                return new Relative(state.scope.lookup(name).label);
+                writer.mov(destinationRegister, new Relative(state.scope.lookup(name, () => {
+                    fatal(`${name} is not defined`);
+                }).label));
             },
-        });
-    }
 
-    function computeAddress(destinationRegister, expression, state) {
-        preserveRegister(registers.dx, () => {
-            writer.mov(destinationRegister, new Immediate(42));
+            Number({ value }) {
+                writer.mov(destinationRegister, new Immediate(value));
+            },
         });
     }
 
@@ -109,6 +184,13 @@ function generateCode(topLevelStatements, writer) {
 
     topLevelStatements.forEach(descend(generateFunctionDefinition, statePrototype.extend({
         scope: rootScope,
+        registerAllocator: new RegisterAllocator(writer),
+        callWithFreeRegister(fn) {
+            return this.registerAllocator.callWithFreeRegister(fn);
+        },
+        borrowRegister(register, fn) {
+            return this.registerAllocator.borrowRegister(register, fn);
+        },
         prefix: '',
     })));
 
@@ -116,6 +198,10 @@ function generateCode(topLevelStatements, writer) {
     function error(message) {
         console.log(`error: at ${showLocation(R.last(stack).location)}: ${message}`);
         result.success = false;
+    }
+
+    function fatal(message) {
+        throw new CompileError(message, R.last(stack).location);
     }
 
     function check(condition, message) {
