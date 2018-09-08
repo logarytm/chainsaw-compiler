@@ -29,7 +29,7 @@
             return (extra = {}) => {
                 return makeNode(Object.assign({
                     kind,
-                    // location: location(),
+                    location: location(),
                 }, extra));
             };
         },

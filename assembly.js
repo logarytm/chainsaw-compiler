@@ -64,12 +64,10 @@ class AssemblyWriter {
         this.opcode('jz', label);
     }
 
-
     sub(lhs, rhs) {
         this.opcode('sub', lhs, rhs);
     }
-
-
+    
     Smul6(lhs, rhs) {
         this.opcode('sys mul6', lhs, rhs);
     }
