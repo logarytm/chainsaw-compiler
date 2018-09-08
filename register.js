@@ -21,8 +21,6 @@ class RegisterAllocator {
         }
 
         this.assemblyWriter.push(register);
-        
-        this
         const result = fn();
         this.assemblyWriter.pop(register);
 
@@ -39,8 +37,10 @@ class RegisterAllocator {
         if (this.nextUnallocated < this.firstInaccessible) {
             const register = this.all[this.nextUnallocated];
             this.nextUnallocated++;
+            const result = fn(register);
+            this.nextUnallocated--;
 
-            return fn(register);
+            return result;
         }
 
         this.assemblyWriter.push(registers.ax);
