@@ -429,8 +429,8 @@ function generateCode(topLevelStatements, writer, metadata) {
 
     function descend(fn, state = mandatory()) {
         return node => {
-            stack.push(node);
             trace('traverse', 'enter', node.kind, showLocation(node.location));
+            stack.push(node);
 
             const result = fn(node, state);
 
