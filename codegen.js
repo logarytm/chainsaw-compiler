@@ -5,8 +5,13 @@ const { CompileError, showCompileError, showLocation, inspect } = require('./uti
 const { registers, RegisterAllocator } = require('./register.js');
 const { getReservationSize, createCallingConvention } = require('./abi.js');
 
-const VARIABLE = Symbol('variable');
-const FUNCTION = Symbol('function');
+/**
+ * These values are assigned to names in the scope.  For example, every function declaration has FUNCTION_NATURE,  and
+ * we can protect from assigning to functions by checking the nature property of a name.
+ */
+const FUNCTION_NATURE = Symbol('function');
+const VARIABLE_NATURE = Symbol('variable');
+const PARAMETER_NATURE = Symbol('parameter');
 
 function generateCode(topLevelStatements, writer, metadata) {
     const result = { success: true };
@@ -19,15 +24,20 @@ function generateCode(topLevelStatements, writer, metadata) {
         const isDefinition = declinition.kind === 'FunctionDefinition';
         const functionName = declinition.functionName;
         const label = writer.prepareLabel(functionName);
-        state.scope.bind(functionName, {
+        const binding = {
             label,
-            nature: FUNCTION,
+            functionName,
             arity: declinition.parameters.length,
             parameters: declinition.parameters,
             returnType: declinition.returnType,
             hasReturnValue: !isVoidType(declinition.returnType),
             callingConvention: createCallingConvention(declinition.callingConvention),
-        }, redefinition(functionName));
+            nature: FUNCTION_NATURE,
+        };
+
+        binding.callingConvention.validateDeclaration(binding, state);
+
+        state.scope.bind(functionName, binding, redefinition(functionName));
 
         if (!isDefinition) {
             return;
@@ -35,30 +45,30 @@ function generateCode(topLevelStatements, writer, metadata) {
 
         const parameterBindings = {};
         for (const parameter of declinition.parameters) {
+            check(parameter.type.kind !== 'ArrayType', 'Cannot pass arrays as arguments. Use a pointer instead.');
+
             parameterBindings[parameter.name] = {
                 label: writer.reserve(functionName + '.P' + parameter.name),
                 name: parameter.name,
+                type: parameter.type,
+                nature: PARAMETER_NATURE,
             };
         }
 
         writer.label(label);
 
         trace('function-prologue', 'start', functionName);
-        if (declinition.parameters.length) {
-            let descent = 0;
-            declinition.parameters.forEach(parameter => {
-                descent++;
-                writer.opcode('add', new Register('sp'), new Immediate(1));
-                writer.mov(parameterBindings[parameter.name].label, new Relative(new Register('sp')));
-            });
-            writer.opcode('sub', new Register('sp'), new Immediate(descent));
-        }
+        binding.callingConvention.emitPrologue(binding, parameterBindings, state);
         trace('function-prologue', 'end', functionName);
 
         declinition.body.statements.forEach(statement => generateStatement(statement, state.extend({
             scope: state.scope.extend(parameterBindings),
             prefix: `${state.prefix}${functionName}.`,
         })));
+
+        trace('function-epilogue', 'start', functionName);
+        binding.callingConvention.emitEpilogue(binding, parameterBindings, state);
+        trace('function-epilogue', 'end', functionName);
 
         writer.ret();
     }
@@ -70,7 +80,7 @@ function generateCode(topLevelStatements, writer, metadata) {
         state.scope.bind(variableName, {
             label,
             type: declaration.variableType,
-            nature: VARIABLE,
+            nature: VARIABLE_NATURE,
         });
 
         if (declaration.initialValue !== null) {
@@ -153,20 +163,18 @@ function generateCode(topLevelStatements, writer, metadata) {
                 }
 
                 const functionName = application.function.name;
-                const declaration = state.scope.lookup(functionName, () => {
+                const binding = state.scope.lookup(functionName, () => {
                     fatal(`${functionName} is not defined.`);
                 });
 
                 check(
-                    application.args.length === declaration.arity,
-                    `Wrong number of arguments to ${functionName} (expected ${declaration.arity}, got ${application.args.length}).`,
+                    application.args.length === binding.arity,
+                    `Wrong number of arguments to ${functionName} (expected ${binding.arity}, got ${application.args.length}).`,
                 );
 
-                declaration.callingConvention.emitCall(declaration, application.args, state.extend({
+                binding.callingConvention.emitCall(binding, application.args, state.extend({
                     computeExpressionIntoRegister: computeExpression,
                 }));
-
-                writer.opcode('call', new Relative(declaration.label));
             },
 
             ArrayDereference(dereference) {
@@ -288,6 +296,7 @@ function generateCode(topLevelStatements, writer, metadata) {
             },
 
             Identifier({ name }) {
+                // Handle pre-defined identifiers.
                 switch (name) {
                 case 'true': {
                     writer.mov(destinationRegister, new Immediate(1));
@@ -300,9 +309,12 @@ function generateCode(topLevelStatements, writer, metadata) {
                 }
                 }
 
-                writer.mov(destinationRegister, new Relative(state.scope.lookup(name, () => {
+                const binding = state.scope.lookup(name, () => {
                     fatal(`${name} is not defined.`);
-                }).label));
+                });
+
+                check(binding.nature === VARIABLE_NATURE || binding.nature === PARAMETER_NATURE, `${name} is not an l-value.`);
+                writer.mov(destinationRegister, new Relative(binding.label));
             },
 
             Number({ value }) {
@@ -317,6 +329,10 @@ function generateCode(topLevelStatements, writer, metadata) {
     const statePrototype = {
         extend(obj) {
             return Object.assign({}, this, obj);
+        },
+
+        createError(message) {
+            return new CompileError(message, top().location, metadata.filename);
         },
 
         registerAllocator: new RegisterAllocator(writer),
@@ -345,11 +361,13 @@ function generateCode(topLevelStatements, writer, metadata) {
         },
     };
 
-    topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
+    const globalState = statePrototype.extend({
         scope: rootScope,
         prefix: '',
         assemblyWriter: writer,
-    })));
+    });
+
+    topLevelStatements.forEach(descend(generateFunctionDeclinition, globalState));
 
     tracing.restoreTraceHandler();
 
@@ -369,12 +387,15 @@ function generateCode(topLevelStatements, writer, metadata) {
 
     //region Error reporting
     function error(message) {
-        console.error(showCompileError(new CompileError(message, top().location)));
+        console.error(showCompileError(globalState.createError(message)));
         result.success = false;
     }
 
+    /**
+     * Reports an unrecoverable error.
+     */
     function fatal(message) {
-        throw new CompileError(message, top().location, metadata.filename);
+        throw globalState.createError(message);
     }
 
     function check(condition, message) {
@@ -388,11 +409,11 @@ function generateCode(topLevelStatements, writer, metadata) {
     }
 
     function redefinition(symbol) {
-        return () => error(`redefinition of "${symbol}"`);
+        return () => fatal(`Redefinition of "${symbol}".`);
     }
 
     function mandatory() {
-        throw new Error('missing argument');
+        throw new Error('Missing argument. This is a bug.');
     }
 
     //endregion

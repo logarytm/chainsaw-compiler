@@ -4,7 +4,6 @@ class AssemblyWriter {
     constructor() {
         this.output = [];
         this.reservations = [];
-        this.knownLabels = {};
         this.labelno = 0;
     }
 

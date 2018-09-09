@@ -1,5 +1,5 @@
-fn peek(addr pword) word;
-fn poke(addr pword, value word) word;
+fn fastcall peek(addr *word) word;
+fn fastcall poke(addr *word, value word) word;
 
 fn memset(array pword, value word, count word) word {
     var counter word = 0;
@@ -11,5 +11,5 @@ fn memset(array pword, value word, count word) word {
 
 fn main() void {
     var array [10]word = 0;
-    memset(array, 2137, 10);
+    memset(array, 2137, 0);
 }
