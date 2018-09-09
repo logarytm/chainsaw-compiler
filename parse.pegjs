@@ -439,11 +439,11 @@ __
 
 ConditionalKeyword = "if" / "unless"
 LoopingKeyword = "while" / "until"
-UnaryToken = "+" / "-" / "~" / "not"
 
+UnaryToken = "+" / "-" / "~" / "not"
 BinaryToken
     = "*" / "/" / "mod"
-    / "+" / "-" / "|" / "&"
+    / "+" / "-" / "|" / "&" / "^"
     / "shl" / "shr"
     / "==" / "!=" / "<=" / ">=" / "<" / ">"
     / "and"

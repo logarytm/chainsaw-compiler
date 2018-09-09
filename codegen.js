@@ -6,7 +6,7 @@ const { registers, RegisterAllocator } = require('./register.js');
 const { getReservationSize, createCallingConvention } = require('./abi.js');
 
 /**
- * These values are assigned to names in the scope.  For example, every function declaration has FUNCTION_NATURE,  and
+ * These values are assigned to names in the scope.  For example, every function declaration has FUNCTION_NATURE, and
  * we can protect from assigning to functions by checking the nature property of a name.
  */
 const FUNCTION_NATURE = Symbol('function');
@@ -24,6 +24,15 @@ function generateCode(topLevelStatements, writer, metadata) {
         const isDefinition = declinition.kind === 'FunctionDefinition';
         const functionName = declinition.functionName;
         const label = writer.prepareLabel(functionName);
+
+        /**
+         * Create a binding.  The convention is that whenever a name is declared, we store the following information
+         * into the scope:
+         *
+         *   - The label, which can be used to reference the allocated memory or the code being generated;
+         *   - Type information, which lets us emit proper calls and check type correctness later on, including
+         *   - The binding nature, which informs what the name symbolises (function, variable, named type...)
+         */
         const binding = {
             label,
             functionName,
@@ -40,12 +49,14 @@ function generateCode(topLevelStatements, writer, metadata) {
         state.scope.bind(functionName, binding, redefinition(functionName));
 
         if (!isDefinition) {
+            // This is only a declaration, we are done here.
             return;
         }
 
         const parameterBindings = {};
         for (const parameter of declinition.parameters) {
-            check(parameter.type.kind !== 'ArrayType', 'Cannot pass arrays as arguments. Use a pointer instead.');
+            check(parameter.type.kind !== 'ArrayType',
+                'Cannot pass arrays as arguments. Use a pointer instead.');
 
             parameterBindings[parameter.name] = {
                 label: writer.reserve(functionName + '.P' + parameter.name),
@@ -207,7 +218,9 @@ function generateCode(topLevelStatements, writer, metadata) {
                     //region Relational operators
                 case '<':
                 case '>': {
+
                     const copyFlag = { '<': 'ccf', '>': 'cof' }[operator.operator];
+
                     state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
                         computeExpression(lhsRegister, operator.lhs, state);
                         computeExpression(rhsRegister, operator.rhs, state);
@@ -222,6 +235,7 @@ function generateCode(topLevelStatements, writer, metadata) {
 
                 case '==':
                 case '!=': {
+
                     const shouldNegate = operator.operator === '!=';
 
                     state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
@@ -240,10 +254,10 @@ function generateCode(topLevelStatements, writer, metadata) {
                 }
                     //endregion
 
-                    //region Assignment operator
+                    //region Assignment operators
                 case '=': {
+
                     let lhsOperand = null;
-                    // TODO: Need to support arrays and pointers.
 
                     switch (operator.lhs.kind) {
                     case 'Identifier': {
@@ -274,8 +288,8 @@ function generateCode(topLevelStatements, writer, metadata) {
                 case '/':
                 case '&': {
                     const opcode = {
-                        '+': 'adc',
-                        '-': 'suc',
+                        '+': 'add',
+                        '-': 'sub',
                         '*': 'Smul6',
                         '/': 'Sdiv6',
                         '&': 'and',
