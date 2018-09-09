@@ -299,9 +299,9 @@ StatementTerminator
     = ";"
 
 Type
-    = "pointer" _ "<" _ type: Type _ ">"
+    = "ptr" _ "<" _ type: Type _ ">" _
     { return tree.PointerToType({ type }); }
-    / "array" _ "<" capacity: Expression ")" _ "," _ type: Type _ ">"
+    / "[" capacity: Number "]" _ type: Type _
     { return tree.ArrayType({ type, capacity }); }
     / name: Identifier
     { return tree.NamedType({ name: String(name) }); }

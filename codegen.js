@@ -3,6 +3,7 @@ const { Scope } = require('./scope.js');
 const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
 const { CompileError, showLocation, inspect } = require('./utility.js');
 const { registers, RegisterAllocator } = require('./register.js');
+const { getReservationSize } = require('./value.js');
 
 const VARIABLE = Symbol('variable');
 const FUNCTION = Symbol('function');
@@ -48,7 +49,7 @@ function generateCode(topLevelStatements, writer) {
 
         writer.label(label);
 
-        writer.comment(`prologue for ${functionName}`);
+        trace('function-prologue', 'start', functionName);
         if (declinition.parameters.length) {
             let descent = 0;
             declinition.parameters.forEach(parameter => {
@@ -58,7 +59,7 @@ function generateCode(topLevelStatements, writer) {
             });
             writer.opcode('sub', new Register('sp'), new Immediate(descent));
         }
-        writer.comment(`end prologue for ${functionName}`);
+        trace('function-prologue', 'end', functionName);
 
         declinition.body.statements.forEach(descend(generateStatement, state.extend({
             scope: state.scope.extend(parameterBindings),
@@ -121,13 +122,22 @@ function generateCode(topLevelStatements, writer) {
 
     function generateVariableDeclaration(declaration, state) {
         const variableName = declaration.variableName;
-        const label = writer.reserve(state.prefix + variableName);
+        const label = writer.reserve(state.prefix + variableName, getReservationSize(declaration.variableType));
 
         state.scope.bind(variableName, {
             label,
             type: declaration.variableType,
             nature: VARIABLE,
         });
+
+        if (declaration.initialValue !== null) {
+            check(declaration.variableType.kind !== 'ArrayType', 'Cannot initialize arrays at definition time.');
+
+            state.callWithFreeRegister(register => {
+                computeExpression(register, declaration.initialValue, state);
+                writer.mov(new Relative(label), register);
+            });
+        }
     }
 
     function generateReturnStatement(rs, state) {
@@ -158,7 +168,13 @@ function generateCode(topLevelStatements, writer) {
             },
 
             ArrayDereference(dereference) {
+                state.callWithFreeRegisters(2, (arrayRegister, offsetRegister) => {
+                    computeExpression(arrayRegister, dereference.array, state);
+                    computeExpression(offsetRegister, dereference.offset, state);
 
+                    writer.opcode('add', arrayRegister, offsetRegister);
+                    writer.mov(destinationRegister, new Relative(arrayRegister));
+                });
             },
 
             UnaryOperator(operator) {
@@ -223,6 +239,7 @@ function generateCode(topLevelStatements, writer) {
                     //region Assignment operator
                 case '=': {
                     let lhsOperand = null;
+                    // TODO: Need to support arrays and pointers.
 
                     switch (operator.lhs.kind) {
                     case 'Identifier': {
@@ -304,6 +321,8 @@ function generateCode(topLevelStatements, writer) {
         },
     };
 
+    tracing.setTraceHandler(traceHandler);
+
     topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
         scope: rootScope,
         prefix: '',
@@ -328,11 +347,19 @@ function generateCode(topLevelStatements, writer) {
         },
     })));
 
+    tracing.restoreTraceHandler();
+
     //region Types
     function isVoidType(type) {
         return type.kind === 'NamedType' && type.name === 'void';
     }
 
+    //endregion
+
+    //region Tracing
+    function traceHandler(family, ...args) {
+        writer.comment(`trace(${family}): ${args.join(' ')}`);
+    }
     //endregion
 
     //region Error reporting

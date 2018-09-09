@@ -14,7 +14,7 @@ class AssemblyWriter {
 
     prepareLabel(name = null) {
         if (name === null) {
-            name = `.L${this.labelno}`;
+            name = `L${this.labelno}$`;
             this.labelno++;
         }
 
@@ -101,7 +101,7 @@ class AssemblyWriter {
         });
         this.reservations.forEach(reservation => {
             console.log();
-            console.log(`${reservation.name}:`);
+            console.log(`.${reservation.name}`);
             console.log(`    X${reservation.data.map(x => x.toString(2).padStart(16, '0')).join('')}`);
         });
     }
@@ -172,7 +172,7 @@ class AssemblyWriter {
 
             if (
                 previousLine instanceof OpcodeLine && currentLine instanceof OpcodeLine &&
-                previousLine.opcode === 'push' && currentLine.opcode === 'pop' &&
+                previousLine.opcode.toLowerCase() === 'push' && currentLine.opcode.toLowerCase() === 'pop' &&
                 previousLine.operands[0] instanceof Register && currentLine.operands[0] instanceof Register &&
                 previousLine.operands[0].isEqualTo(currentLine.operands[0])
             ) {
@@ -193,7 +193,7 @@ class CommentLine {
     }
 
     format() {
-        return `    ; ${this.text}`;
+        return `    ' ${this.text}`;
     }
 }
 
@@ -203,13 +203,13 @@ class LabelLine {
     }
 
     format() {
-        return `${this.label.name}:`;
+        return `.${this.label.name}`;
     }
 }
 
 class OpcodeLine {
     constructor(opcode, operands) {
-        this.opcode = opcode.toLowerCase();
+        this.opcode = opcode.toUpperCase();
         this.operands = operands;
     }
 
@@ -234,17 +234,21 @@ class Label extends Operand {
     }
 
     format() {
-        return `${this.expression}`;
+        return `.${this.expression}`;
     }
 
     isInternal() {
-        return this.name.startsWith('.');
+        return this.name.endsWith('$');
     }
 }
 
 class Register extends Operand {
     format() {
         return `${this.expression}`;
+    }
+
+    get name() {
+        return this.expression.toUpperCase();
     }
 
     isEqualTo(r) {

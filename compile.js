@@ -5,12 +5,14 @@ const { AssemblyWriter } = require('./assembly.js');
 
 const cli = require('meow')(`
     Usage
-        $ node compile.js <file> [--debug]
+        $ node compile.js <file> [--debug] [--traces <families>]
 `, {
     alias: {
         d: 'debug',
     },
 });
+
+require('./tracing.js').setup(cli.flags.traces ? cli.flags.traces.split(',') : []);
 
 global.debugMode = cli.flags.debug;
 const filename = cli.input[0];

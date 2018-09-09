@@ -17,13 +17,18 @@ class RegisterAllocator {
     }
 
     borrowRegister(register, fn) {
+        trace('register-borrowing', 'ignore', register.name);
         if (!this.isAllocated(register)) {
             return fn();
         }
 
+        trace('register-borrowing', 'start', register.name);
+
         this.assemblyWriter.push(register);
         const result = fn();
         this.assemblyWriter.pop(register);
+
+        trace('register-borrowing', 'end', register.name);
 
         return result;
     }
@@ -31,7 +36,7 @@ class RegisterAllocator {
     isAllocated(register) {
         const index = this.all.findIndex(r => r.isEqualTo(register));
 
-        return this.nextUnallocated <= index;
+        return this.nextUnallocated > index;
     }
 
     callWithFreeRegister(fn) {

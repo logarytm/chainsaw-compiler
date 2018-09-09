@@ -3,6 +3,8 @@
 fn unmap_page(addr pword, n word) pword;
 fn ptes(addr pword) pword;
 fn free_frame(addr pword) void;
+fn peek(addr pword) word;
+fn poke(addr pword, value word) word;
 
 fn unmap_range(start /* page */ pword, size word) void {
     var message str = "hello, world";
@@ -14,7 +16,7 @@ fn unmap_range(start /* page */ pword, size word) void {
         e = ptes(start + i);
         if e[0] == 0xf {
             frame_allocated = true;
-            if under(e)[3] & 4 {
+            if peek(e)[3] & 4 {
                 frame_allocated = false;
             }
             physical = unmap_page(start + i, 0);
