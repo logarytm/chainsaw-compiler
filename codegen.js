@@ -9,13 +9,6 @@ const VARIABLE = Symbol('variable');
 const FUNCTION = Symbol('function');
 
 function generateCode(topLevelStatements, writer) {
-    function preserveRegister(register, fn) {
-        writer.push(registers.ax);
-        fn();
-        writer.pop(registers.ax);
-    }
-
-    const preserveAx = fn => preserveRegister(registers.ax, fn);
     const result = { success: true };
     const stack = [];
     const rootScope = new Scope();
@@ -61,7 +54,7 @@ function generateCode(topLevelStatements, writer) {
         }
         trace('function-prologue', 'end', functionName);
 
-        declinition.body.statements.forEach(descend(generateStatement, state.extend({
+        declinition.body.statements.forEach(statement => generateStatement(statement, state.extend({
             scope: state.scope.extend(parameterBindings),
             prefix: `${state.prefix}${functionName}$`,
         })));
@@ -118,7 +111,7 @@ function generateCode(topLevelStatements, writer) {
     }
 
     function generateBody(body, state) {
-        body.statements.forEach(descend(generateStatement, state));
+        body.statements.forEach(statement => generateStatement(statement, state));
     }
 
     function generateVariableDeclaration(declaration, state) {
@@ -199,18 +192,15 @@ function generateCode(topLevelStatements, writer) {
                 case '<':
                 case '>': {
                     // TODO(refactor): flatten register allocation
-                    state.callWithFreeRegister(lhsRegister => {
-                        const copyFlag = { '<': 'ccf', '>': 'cof' }[operator.operator];
-
-                        return state.callWithFreeRegister(rhsRegister => {
-                            computeExpression(lhsRegister, operator.lhs, state);
-                            computeExpression(rhsRegister, operator.rhs, state);
-                            writer.cmp(lhsRegister, rhsRegister);
-                            state.borrowRegister(registers.dx, () => {
-                                writer.opcode(copyFlag);
-                                writer.mov(destinationRegister, registers.dx);
-                            });
-                        })
+                    const copyFlag = { '<': 'ccf', '>': 'cof' }[operator.operator];
+                    state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
+                        computeExpression(lhsRegister, operator.lhs, state);
+                        computeExpression(rhsRegister, operator.rhs, state);
+                        writer.cmp(lhsRegister, rhsRegister);
+                        state.borrowRegister(registers.dx, () => {
+                            writer.opcode(copyFlag);
+                            writer.mov(destinationRegister, registers.dx);
+                        });
                     });
                     break;
                 }
@@ -365,12 +355,12 @@ function generateCode(topLevelStatements, writer) {
 
     //region Error reporting
     function error(message) {
-        console.log(`error: at ${showLocation(R.last(stack).location)}: ${message}`);
+        console.log(`error: at ${showLocation(top().location)}: ${message}`);
         result.success = false;
     }
 
     function fatal(message) {
-        throw new CompileError(message, R.last(stack).location);
+        throw new CompileError(message, top().location);
     }
 
     function check(condition, message) {
@@ -394,6 +384,10 @@ function generateCode(topLevelStatements, writer) {
     //endregion
 
     //region Tree traversal
+    function top() {
+        return R.last(stack);
+    }
+
     function into(fn, node, state = mandatory()) {
         return descend(fn, state)(node);
     }
@@ -401,7 +395,11 @@ function generateCode(topLevelStatements, writer) {
     function descend(fn, state = mandatory()) {
         return node => {
             stack.push(node);
+            trace('traverse', 'enter', node.kind, showLocation(node.location));
+
             const result = fn(node, state);
+
+            trace('traverse', 'leave', node.kind, showLocation(node.location));
             stack.pop();
 
             return result;

@@ -94,14 +94,28 @@ class AssemblyWriter {
 
     dump() {
         this.output.forEach(line => {
-            if (line instanceof LabelLine && line.label.name[0] !== 'L') {
-                console.log();
+            if (process.stdout.isTTY) {
+                if (line instanceof CommentLine) {
+                    console.log(`\x1b[32m${line.format()}\x1b[0m`);
+
+                    return;
+                } else if (line instanceof OpcodeLine) {
+                    console.log(`\x1b[31m${line.format().replace(/(?<=\S) /, '\x1b[0m ')}\x1b[0m`);
+
+                    return;
+                // } else if (line instanceof LabelLine) {
+                //     console.log(`\x1b[1;34m${line.format()}\x1b[0m`);
+                //
+                //     return;
+                }
             }
+
             console.log(line.format());
         });
+
         this.reservations.forEach(reservation => {
-            console.log();
             console.log(`.${reservation.name}`);
+
             console.log(`    X${reservation.data.map(x => x.toString(2).padStart(16, '0')).join('')}`);
         });
     }
