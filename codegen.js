@@ -94,8 +94,9 @@ function generateCode(topLevelStatements, writer) {
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
             writer.cmp(predicateRegister, predicateRegister);
-            writer.jz(elseLabel);
+            writer.jz(new Relative(elseLabel));
             into(generateBody, statement.thenBranch, state);
+            writer.jmp(new Relative(afterLabel));
             writer.label(elseLabel);
             into(generateBody, statement.elseBranch, state);
             writer.label(afterLabel);
@@ -109,9 +110,9 @@ function generateCode(topLevelStatements, writer) {
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
             writer.cmp(predicateRegister, predicateRegister);
-            writer.jz(exit);
+            writer.jz(new Relative(exit));
             into(generateBody, statement.body, state);
-            writer.jmp(start);
+            writer.jmp(new Relative(start));
             writer.label(exit);
         });
     }
@@ -164,7 +165,7 @@ function generateCode(topLevelStatements, writer) {
                     });
                 }
 
-                writer.opcode('call', declaration.label);
+                writer.opcode('call', new Relative(declaration.label));
             },
 
             ArrayDereference(dereference) {

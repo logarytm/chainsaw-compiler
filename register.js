@@ -42,15 +42,24 @@ class RegisterAllocator {
     callWithFreeRegister(fn) {
         if (this.nextUnallocated < this.firstInaccessible) {
             const register = this.all[this.nextUnallocated];
+
             this.nextUnallocated++;
+            trace('register-allocation', 'start', register.name);
+
             const result = fn(register);
+
+            trace('register-allocation', 'end', register.name);
             this.nextUnallocated--;
 
             return result;
         }
 
+        trace('register-allocation', 'start', registers.ax.name);
         this.assemblyWriter.push(registers.ax);
+
         const result = fn(registers.ax);
+
+        trace('register-allocation', 'end', registers.ax.name);
         this.assemblyWriter.pop(registers.ax);
 
         return result;

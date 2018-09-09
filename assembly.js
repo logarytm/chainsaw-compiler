@@ -214,7 +214,7 @@ class OpcodeLine {
     }
 
     format() {
-        return '    ' + `${this.opcode} ${this.operands.map(x => x.format()).join(', ')}`.trim();
+        return '    ' + `${this.opcode} ${this.operands.map(x => x.format()).join(',')}`.trim();
     }
 }
 
@@ -244,7 +244,7 @@ class Label extends Operand {
 
 class Register extends Operand {
     format() {
-        return `${this.expression}`;
+        return this.name;
     }
 
     get name() {

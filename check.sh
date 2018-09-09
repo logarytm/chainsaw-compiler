@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-FILES=(samples/factorial.saw samples/unmap.saw)
-for FILE in ${FILES[@]}; do
-    node compile $FILE >> /dev/null 2>&1 \
-        && echo "PASS $FILE" \
-        || echo "FAIL $FILE"
+echo "checking code generation"
+for FILE in samples/*.saw; do
+    ASMFILE=${FILE/saw/asm}
+    ASMFILE=${ASMFILE/samples/tmp}
+    node compile $FILE > $ASMFILE 2>&1 \
+        && echo "PASS $FILE $ASMFILE" \
+        || (echo "FAIL $FILE" && rm $ASMFILE)
 done
