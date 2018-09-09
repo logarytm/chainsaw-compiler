@@ -103,10 +103,6 @@ class AssemblyWriter {
                     console.log(`\x1b[31m${line.format().replace(/(?<=\S) /, '\x1b[0m ')}\x1b[0m`);
 
                     return;
-                // } else if (line instanceof LabelLine) {
-                //     console.log(`\x1b[1;34m${line.format()}\x1b[0m`);
-                //
-                //     return;
                 }
             }
 
@@ -115,8 +111,7 @@ class AssemblyWriter {
 
         this.reservations.forEach(reservation => {
             console.log(`.${reservation.name}`);
-
-            console.log(`    X${reservation.data.map(x => x.toString(2).padStart(16, '0')).join('')}`);
+            console.log(reservation.data.map(x => '    X' + x.toString(2).padStart(16, '0')).join('\n'));
         });
     }
 

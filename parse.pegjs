@@ -192,7 +192,9 @@ TopLevelStatement
     { return definition; }
 
 FunctionDeclaration
-    = "fn" _
+    =
+        "fn" _
+        callingConvention: CallingConventionSpecifier _
         functionName: Identifier _
         parameters: ParameterList _
         returnType: Type _
@@ -200,25 +202,41 @@ FunctionDeclaration
     {
         return tree.FunctionDeclaration({
             functionName: String(functionName),
+            callingConvention,
             parameters,
             returnType,
         });
     }
 
 FunctionDefinition
-    = "fn" _
+    =
+        "fn" _
         functionName: Identifier _
+        callingConvention: CallingConventionSpecifier _
         parameters: ParameterList _
         returnType: Type _
         body: FunctionBody _
     {
         return tree.FunctionDefinition({
             functionName: String(functionName),
+            callingConvention,
             parameters,
             returnType,
             body,
         });
     }
+
+CallingConventionSpecifier
+    = name: CallingConventionName _
+    { return name; }
+    / _
+    { return "stdcall"; }
+
+CallingConventionName
+    = "stdcall"
+    { return "stdcall"; }
+    / "fastcall"
+    { return "fastcall"; }
 
 ParameterList
     = "(" _ ")" _
@@ -239,7 +257,8 @@ FunctionBody
     { return tree.FunctionBody({ statements: statements.map(nth(0)).filter(notEmpty) }); }
 
 FunctionStatement
-    = "var" __
+    =
+        "var" __
         variableName: Identifier __
         variableType: Type _
         initialValue: ("=" _ Expression)? _
@@ -260,7 +279,8 @@ Statement
     / EmptyStatement
     / "return" _ expression: Expression _ StatementTerminator
     { return tree.ReturnStatement({ expression }); }
-    / keyword: ConditionalKeyword _
+    /
+        keyword: ConditionalKeyword _
         predicate: Expression _
         thenBranch: Body _
         elseBranch: ("else" _ Body)?
@@ -275,7 +295,7 @@ Statement
             elseBranch: get(elseBranch, 2, emptyBody),
         });
     }
-    / keyword: LoopingKeyword _
+    /   keyword: LoopingKeyword _
         predicate: Expression _
         body: Body
     {

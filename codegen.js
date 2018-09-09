@@ -3,7 +3,7 @@ const { Scope } = require('./scope.js');
 const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
 const { CompileError, showLocation, inspect } = require('./utility.js');
 const { registers, RegisterAllocator } = require('./register.js');
-const { getReservationSize } = require('./value.js');
+const { getReservationSize, createCallingConvention } = require('./abi.js');
 
 const VARIABLE = Symbol('variable');
 const FUNCTION = Symbol('function');
@@ -26,6 +26,7 @@ function generateCode(topLevelStatements, writer) {
             parameters: declinition.parameters,
             returnType: declinition.returnType,
             hasReturnValue: !isVoidType(declinition.returnType),
+            callingConvention: createCallingConvention(declinition.callingConvention),
         }, redefinition(functionName));
 
         if (!isDefinition) {
@@ -35,7 +36,7 @@ function generateCode(topLevelStatements, writer) {
         const parameterBindings = {};
         for (const parameter of declinition.parameters) {
             parameterBindings[parameter.name] = {
-                label: writer.reserve(functionName + '$' + parameter.name),
+                label: writer.reserve(functionName + '.P' + parameter.name),
                 name: parameter.name,
             };
         }
@@ -56,10 +57,30 @@ function generateCode(topLevelStatements, writer) {
 
         declinition.body.statements.forEach(statement => generateStatement(statement, state.extend({
             scope: state.scope.extend(parameterBindings),
-            prefix: `${state.prefix}${functionName}$`,
+            prefix: `${state.prefix}${functionName}.`,
         })));
 
         writer.ret();
+    }
+
+    function generateVariableDeclaration(declaration, state) {
+        const variableName = declaration.variableName;
+        const label = writer.reserve(state.prefix + 'V' + variableName, getReservationSize(declaration.variableType));
+
+        state.scope.bind(variableName, {
+            label,
+            type: declaration.variableType,
+            nature: VARIABLE,
+        });
+
+        if (declaration.initialValue !== null) {
+            check(declaration.variableType.kind !== 'ArrayType', 'Cannot initialize arrays at definition time.');
+
+            state.callWithFreeRegister(register => {
+                computeExpression(register, declaration.initialValue, state);
+                writer.mov(new Relative(label), register);
+            });
+        }
     }
 
     function generateStatement(statement, state) {
@@ -119,26 +140,6 @@ function generateCode(topLevelStatements, writer) {
         body.statements.forEach(statement => generateStatement(statement, state));
     }
 
-    function generateVariableDeclaration(declaration, state) {
-        const variableName = declaration.variableName;
-        const label = writer.reserve(state.prefix + variableName, getReservationSize(declaration.variableType));
-
-        state.scope.bind(variableName, {
-            label,
-            type: declaration.variableType,
-            nature: VARIABLE,
-        });
-
-        if (declaration.initialValue !== null) {
-            check(declaration.variableType.kind !== 'ArrayType', 'Cannot initialize arrays at definition time.');
-
-            state.callWithFreeRegister(register => {
-                computeExpression(register, declaration.initialValue, state);
-                writer.mov(new Relative(label), register);
-            });
-        }
-    }
-
     function generateReturnStatement(rs, state) {
         computeExpression(registers.ax, rs.expression, state);
         writer.ret();
@@ -156,12 +157,14 @@ function generateCode(topLevelStatements, writer) {
                     fatal(`${functionName} is not defined.`);
                 });
 
-                for (let argument of application.args) {
-                    state.callWithFreeRegister(register => {
-                        computeExpression(register, argument, state);
-                        writer.push(register);
-                    });
-                }
+                check(
+                    application.args.length === declaration.arity,
+                    `Wrong number of arguments to ${functionName} (expected ${declaration.arity}, got ${application.args.length}.`,
+                );
+
+                declaration.callingConvention.emitCall(declaration, application.args, state.extend({
+                    computeExpressionIntoRegister: computeExpression,
+                }));
 
                 writer.opcode('call', new Relative(declaration.label));
             },
@@ -345,6 +348,7 @@ function generateCode(topLevelStatements, writer) {
     topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
         scope: rootScope,
         prefix: '',
+        assemblyWriter: writer,
     })));
 
     tracing.restoreTraceHandler();
