@@ -1,14 +1,14 @@
 const R = require('ramda');
 const { Scope } = require('./scope.js');
 const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
-const { CompileError, showLocation, inspect } = require('./utility.js');
+const { CompileError, showCompileError, showLocation, inspect } = require('./utility.js');
 const { registers, RegisterAllocator } = require('./register.js');
 const { getReservationSize, createCallingConvention } = require('./abi.js');
 
 const VARIABLE = Symbol('variable');
 const FUNCTION = Symbol('function');
 
-function generateCode(topLevelStatements, writer) {
+function generateCode(topLevelStatements, writer, metadata) {
     const result = { success: true };
     const stack = [];
     const rootScope = new Scope();
@@ -159,7 +159,7 @@ function generateCode(topLevelStatements, writer) {
 
                 check(
                     application.args.length === declaration.arity,
-                    `Wrong number of arguments to ${functionName} (expected ${declaration.arity}, got ${application.args.length}.`,
+                    `Wrong number of arguments to ${functionName} (expected ${declaration.arity}, got ${application.args.length}).`,
                 );
 
                 declaration.callingConvention.emitCall(declaration, application.args, state.extend({
@@ -369,17 +369,17 @@ function generateCode(topLevelStatements, writer) {
 
     //region Error reporting
     function error(message) {
-        console.log(`error: at ${showLocation(top().location)}: ${message}`);
+        console.error(showCompileError(new CompileError(message, top().location)));
         result.success = false;
     }
 
     function fatal(message) {
-        throw new CompileError(message, top().location);
+        throw new CompileError(message, top().location, metadata.filename);
     }
 
     function check(condition, message) {
         if (!condition) {
-            error(message);
+            fatal(message);
         }
     }
 

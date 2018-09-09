@@ -1,4 +1,3 @@
-const winston = require('winston');
 const { inspect } = require('./utility.js');
 
 const cli = require('meow')(`
@@ -17,9 +16,10 @@ if (!cli.input.length) {
 
 global.debugMode = cli.flags.debug;
 const filename = cli.input[0];
-const { showCompileError, isCompileError, parseFile } = require('./parse.js');
+const { parseFile } = require('./parse.js');
+const { showCompileError, isCompileError } = require('./utility.js');
 
-function main() {
+    function main() {
     const parseTree = parseFile(filename);
 
     inspect(parseTree);

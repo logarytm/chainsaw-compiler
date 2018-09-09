@@ -5,8 +5,8 @@ const {
     readFile,
     writeFile,
     inspect,
+    showCompileError,
     isOutOfDate,
-    showLocation,
 } = require('./utility');
 
 const outputFilename = `${__dirname}/parse-generated.js`;
@@ -48,19 +48,7 @@ function parseFile(filename) {
     });
 }
 
-function isCompileError(error) {
-    return error.name === 'SyntaxError' || error.constructor.name === 'SyntaxError'
-        || error.constructor.name === 'CompileError';
-}
-
-function showCompileError(error) {
-    console.error(`error: ${error.message} (at ${showLocation(error.location)})`);
-    if (global.debugMode) {
-        inspect(error);
-    }
-}
 
 exports.parse = parse;
 exports.parseFile = parseFile;
-exports.isCompileError = isCompileError;
-exports.showCompileError = showCompileError;
+

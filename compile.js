@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-const { parseFile, isCompileError, showCompileError } = require('./parse.js');
+const { parseFile } = require('./parse.js');
+const {  isCompileError, showCompileError } = require('./utility.js');
 const { generateCode } = require('./codegen.js');
 const { AssemblyWriter } = require('./assembly.js');
 
@@ -18,14 +19,16 @@ global.debugMode = cli.flags.debug;
 const filename = cli.input[0];
 
 if (!cli.input.length) {
-    console.error('error: no input file');
+    console.error('fatal: No input files.');
     process.exit(1);
 }
 
 try {
     const topLevelStatements = parseFile(filename);
     const assemblyWriter = new AssemblyWriter();
-    const result = generateCode(topLevelStatements, assemblyWriter);
+    const result = generateCode(topLevelStatements, assemblyWriter, {
+        filename,
+    });
 
     if (result.success || debugMode) {
         assemblyWriter.optimize();
@@ -43,6 +46,6 @@ try {
     }
 
     showCompileError(e);
-    console.error('error: compilation aborted');
+    console.error('fatal: Compilation aborted.');
     process.exit(1);
 }

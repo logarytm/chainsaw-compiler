@@ -2,9 +2,10 @@ const fs = require('fs');
 const util = require('util');
 
 class CompileError extends Error {
-    constructor(message, location) {
+    constructor(message, location, filename = null) {
         super(message);
         this.location = location;
+        this.filename = filename;
     }
 }
 
@@ -30,7 +31,23 @@ function isOutOfDate(prerequisiteFilename, targetFilename) {
 }
 
 function showLocation(location) {
+    if (location.start.line === location.end.line) {
+        return `${location.start.line}:${location.start.column}`;
+    }
+
     return `${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
+}
+
+function isCompileError(error) {
+    return error.name === 'SyntaxError' || error.constructor.name === 'SyntaxError'
+        || error.constructor.name === 'CompileError';
+}
+
+function showCompileError(error) {
+    console.error(`${error.filename || 'stdin'}:${showLocation(error.location)}: ${error.message}`);
+    if (global.debugMode) {
+        inspect(error);
+    }
 }
 
 exports.CompileError = CompileError;
@@ -40,3 +57,5 @@ exports.lastModified = lastModified;
 exports.isOutOfDate = isOutOfDate;
 exports.inspect = inspect;
 exports.showLocation = showLocation;
+exports.isCompileError = isCompileError;
+exports.showCompileError = showCompileError;
