@@ -86,11 +86,14 @@ function generateCode(topLevelStatements, writer) {
 
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
+
             writer.cmp(predicateRegister, predicateRegister);
             writer.jz(new Relative(elseLabel));
+
             into(generateBody, statement.thenBranch, state);
             writer.jmp(new Relative(afterLabel));
             writer.label(elseLabel);
+
             into(generateBody, statement.elseBranch, state);
             writer.label(afterLabel);
         });
@@ -102,8 +105,10 @@ function generateCode(topLevelStatements, writer) {
 
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
+
             writer.cmp(predicateRegister, predicateRegister);
             writer.jz(new Relative(exit));
+
             into(generateBody, statement.body, state);
             writer.jmp(new Relative(start));
             writer.label(exit);
@@ -191,7 +196,6 @@ function generateCode(topLevelStatements, writer) {
                     //region Relational operators
                 case '<':
                 case '>': {
-                    // TODO(refactor): flatten register allocation
                     const copyFlag = { '<': 'ccf', '>': 'cof' }[operator.operator];
                     state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
                         computeExpression(lhsRegister, operator.lhs, state);
@@ -209,19 +213,17 @@ function generateCode(topLevelStatements, writer) {
                 case '!=': {
                     const shouldNegate = operator.operator === '!=';
 
-                    state.callWithFreeRegister(lhsRegister => {
-                        return state.callWithFreeRegister(rhsRegister => {
-                            computeExpression(lhsRegister, operator.lhs, state);
-                            computeExpression(rhsRegister, operator.rhs, state);
-                            writer.test(lhsRegister, rhsRegister);
-                            state.borrowRegister(registers.dx, () => {
-                                writer.czf();
-                                writer.mov(destinationRegister, registers.dx);
-                                if (shouldNegate) {
-                                    writer.not(destinationRegister);
-                                }
-                            });
-                        })
+                    state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
+                        computeExpression(lhsRegister, operator.lhs, state);
+                        computeExpression(rhsRegister, operator.rhs, state);
+                        writer.test(lhsRegister, rhsRegister);
+                        state.borrowRegister(registers.dx, () => {
+                            writer.czf();
+                            writer.mov(destinationRegister, registers.dx);
+                            if (shouldNegate) {
+                                writer.not(destinationRegister);
+                            }
+                        });
                     });
                     break;
                 }
@@ -306,24 +308,26 @@ function generateCode(topLevelStatements, writer) {
         });
     }
 
+    // Write traces as comments in assembly output.
+    tracing.setTraceHandler(traceHandler);
+
     const statePrototype = {
         extend(obj) {
             return Object.assign({}, this, obj);
         },
-    };
 
-    tracing.setTraceHandler(traceHandler);
-
-    topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
-        scope: rootScope,
-        prefix: '',
         registerAllocator: new RegisterAllocator(writer),
 
         callWithFreeRegister(fn) {
             return this.registerAllocator.callWithFreeRegister(fn);
         },
 
+        // Allocates a number of registers to be used at the same time.
         callWithFreeRegisters(count, fn, registers = []) {
+            if (count > this.registerAllocator.maxUsed) {
+                throw new Error(`Cannot use more than ${this.registerAllocator.maxUsed} registers at the same time.`);
+            }
+
             if (registers.length < count) {
                 return this.callWithFreeRegister(register => {
                     return this.callWithFreeRegisters(count, fn, [...registers, register]);
@@ -336,6 +340,11 @@ function generateCode(topLevelStatements, writer) {
         borrowRegister(register, fn) {
             return this.registerAllocator.borrowRegister(register, fn);
         },
+    };
+
+    topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
+        scope: rootScope,
+        prefix: '',
     })));
 
     tracing.restoreTraceHandler();
@@ -351,6 +360,7 @@ function generateCode(topLevelStatements, writer) {
     function traceHandler(family, ...args) {
         writer.comment(`trace(${family}): ${args.join(' ')}`);
     }
+
     //endregion
 
     //region Error reporting
