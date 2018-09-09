@@ -4,7 +4,6 @@ const peg = require('pegjs');
 const {
     readFile,
     writeFile,
-    inspect,
     showCompileError,
     isOutOfDate,
 } = require('./utility');

@@ -29,26 +29,19 @@ class StdcallConvention {
 
         state.assemblyWriter.opcode('call', new Relative(binding.label));
 
-        trace('caller-cleanup', 'start');
+        trace('stdcall', 'caller-cleanup', 'start');
         state.callWithFreeRegister(register => {
             state.assemblyWriter.pop(register);
         });
-        trace('caller-cleanup', 'end');
+        trace('stdcall', 'caller-cleanup', 'end');
     }
 
     emitPrologue(binding, parameterBindings, state) {
-        if (binding.parameters.length) {
-            let shift = 0;
-            binding.parameters.forEach(parameter => {
-                shift++;
-                state.assemblyWriter.opcode('add', new Register('sp'), new Immediate(1));
-                state.assemblyWriter.mov(parameterBindings[parameter.name].label, new Relative(new Register('sp')));
-            });
-            state.assemblyWriter.opcode('sub', new Register('sp'), new Immediate(shift));
-        }
+        // FIXME(abi): Load parameter carries!
     }
 
     emitEpilogue(binding, parameterBindings, state) {
+        // FIXME(abi): Restore parameter carries!
     }
 }
 
