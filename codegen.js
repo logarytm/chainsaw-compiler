@@ -34,6 +34,10 @@ function generateCode(topLevelStatements, writer) {
             hasReturnValue: !isVoidType(declinition.returnType),
         }, redefinition(functionName));
 
+        if (!isDefinition) {
+            return;
+        }
+
         const parameterBindings = {};
         for (const parameter of declinition.parameters) {
             parameterBindings[parameter.name] = {
@@ -42,15 +46,26 @@ function generateCode(topLevelStatements, writer) {
             };
         }
 
-        if (!isDefinition) {
-            return;
-        }
-
         writer.label(label);
+
+        writer.comment(`prologue for ${functionName}`);
+        if (declinition.parameters.length) {
+            let descent = 0;
+            declinition.parameters.forEach(parameter => {
+                descent++;
+                writer.opcode('add', new Register('sp'), new Immediate(1));
+                writer.mov(parameterBindings[parameter.name].label, new Relative(new Register('sp')));
+            });
+            writer.opcode('sub', new Register('sp'), new Immediate(descent));
+        }
+        writer.comment(`end prologue for ${functionName}`);
+
         declinition.body.statements.forEach(descend(generateStatement, state.extend({
             scope: state.scope.extend(parameterBindings),
             prefix: `${state.prefix}${functionName}$`,
         })));
+
+        writer.ret();
     }
 
     function generateStatement(statement, state) {
@@ -123,9 +138,27 @@ function generateCode(topLevelStatements, writer) {
     function computeExpression(destinationRegister, expression, state = mandatory()) {
         match(expression, {
             FunctionApplication(application) {
+                if (application.function.kind !== 'Identifier') {
+                    throw new Error(`Calling expressions as functions is not implemented.`);
+                }
+
+                const functionName = application.function.name;
+                const declaration = state.scope.lookup(functionName, () => {
+                    fatal(`${functionName} is not defined.`);
+                });
+
+                for (let argument of application.args) {
+                    state.callWithFreeRegister(register => {
+                        computeExpression(register, argument, state);
+                        writer.push(register);
+                    });
+                }
+
+                writer.opcode('call', declaration.label);
             },
 
             ArrayDereference(dereference) {
+
             },
 
             UnaryOperator(operator) {
@@ -273,14 +306,26 @@ function generateCode(topLevelStatements, writer) {
 
     topLevelStatements.forEach(descend(generateFunctionDeclinition, statePrototype.extend({
         scope: rootScope,
+        prefix: '',
         registerAllocator: new RegisterAllocator(writer),
+
         callWithFreeRegister(fn) {
             return this.registerAllocator.callWithFreeRegister(fn);
         },
+
+        callWithFreeRegisters(count, fn, registers = []) {
+            if (registers.length < count) {
+                return this.callWithFreeRegister(register => {
+                    return this.callWithFreeRegisters(count, fn, [...registers, register]);
+                });
+            }
+
+            return fn(...registers);
+        },
+
         borrowRegister(register, fn) {
             return this.registerAllocator.borrowRegister(register, fn);
         },
-        prefix: '',
     })));
 
     //region Types

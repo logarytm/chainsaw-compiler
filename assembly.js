@@ -8,9 +8,13 @@ class AssemblyWriter {
         this.labelno = 0;
     }
 
+    comment(text) {
+        this.output.push(new CommentLine(text));
+    }
+
     prepareLabel(name = null) {
         if (name === null) {
-            name = `L${this.labelno}`;
+            name = `.L${this.labelno}`;
             this.labelno++;
         }
 
@@ -97,7 +101,7 @@ class AssemblyWriter {
         });
         this.reservations.forEach(reservation => {
             console.log();
-            console.log(`.${reservation.name}:`);
+            console.log(`${reservation.name}:`);
             console.log(`    X${reservation.data.map(x => x.toString(2).padStart(16, '0')).join('')}`);
         });
     }
@@ -123,6 +127,40 @@ class AssemblyWriter {
         }
 
         this.optimizeSpuriousSaves();
+        this.optimizeUnusedLabels();
+    }
+
+    optimizeUnusedLabels() {
+        const used = new Set();
+
+        this.output.forEach(x => {
+            if (x instanceof OpcodeLine) {
+                x.operands.forEach(operand => {
+                    let label = null;
+                    if (operand instanceof Label) {
+                        label = operand;
+                    } else if ((operand instanceof Relative || operand instanceof Absolute) && operand.expression instanceof Label) {
+                        label = operand.expression;
+                    }
+
+                    if (label !== null) {
+                        used.add(label.name);
+                    }
+                });
+            }
+        });
+
+        this.output = this.output.filter(line => {
+            if (!(line instanceof LabelLine)) {
+                return true;
+            }
+
+            return used.has(line.label.name) || !line.label.isInternal();
+        });
+
+        this.reservations = this.reservations.filter(reservation => {
+            return used.has(reservation.name);
+        });
     }
 
     optimizeSpuriousSaves() {
@@ -149,13 +187,23 @@ class AssemblyWriter {
     }
 }
 
+class CommentLine {
+    constructor(text) {
+        this.text = text;
+    }
+
+    format() {
+        return `    ; ${this.text}`;
+    }
+}
+
 class LabelLine {
     constructor(label) {
         this.label = label;
     }
 
     format() {
-        return `.${this.label.name}:`;
+        return `${this.label.name}:`;
     }
 }
 
@@ -186,7 +234,11 @@ class Label extends Operand {
     }
 
     format() {
-        return `.${this.expression}`;
+        return `${this.expression}`;
+    }
+
+    isInternal() {
+        return this.name.startsWith('.');
     }
 }
 
@@ -202,7 +254,7 @@ class Register extends Operand {
 
 class Immediate extends Operand {
     format() {
-        return `${this.expression}`;
+        return `(${this.expression})`;
     }
 }
 

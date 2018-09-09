@@ -5,6 +5,7 @@ const registers = {
     bx: new Register('BX'),
     cx: new Register('CX'),
     dx: new Register('DX'),
+    bp: new Register('BP'),
 };
 
 class RegisterAllocator {
