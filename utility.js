@@ -50,6 +50,17 @@ function showCompileError(error) {
     }
 }
 
+function equals(a, b) {
+    const shouldRecurse = typeof a === 'object' && typeof b === 'object' && a !== null && b !== null;
+    if (shouldRecurse) {
+        return Object.keys(a)
+            .filter(k => k !== 'location')
+            .every(k => equals(a[k], b[k]));
+    }
+
+    return a === b;
+}
+
 exports.CompileError = CompileError;
 exports.readFile = (filename) => fs.readFileSync(filename, 'utf8');
 exports.writeFile = fs.writeFileSync;
@@ -59,3 +70,4 @@ exports.inspect = inspect;
 exports.showLocation = showLocation;
 exports.isCompileError = isCompileError;
 exports.showCompileError = showCompileError;
+exports.equals = equals;

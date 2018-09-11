@@ -1,7 +1,7 @@
 const R = require('ramda');
 const { Scope } = require('./scope.js');
 const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
-const { CompileError, showCompileError, showLocation, inspect } = require('./utility.js');
+const { CompileError, showCompileError, showLocation, equals } = require('./utility.js');
 const { registers, RegisterAllocator } = require('./register.js');
 const { getReservationSize, createCallingConvention } = require('./abi.js');
 
@@ -36,6 +36,7 @@ function generateCode(topLevelStatements, writer, metadata) {
         const binding = {
             label,
             functionName,
+            isDefinition,
             arity: declinition.parameters.length,
             parameters: declinition.parameters,
             returnType: declinition.returnType,
@@ -46,7 +47,22 @@ function generateCode(topLevelStatements, writer, metadata) {
 
         binding.callingConvention.validateDeclaration(binding, state);
 
-        state.scope.bind(functionName, binding, redefinition(functionName));
+        state.scope.bind(functionName, binding, function alreadyBound(previousBinding) {
+            // There can never be more than one definition.
+            if (previousBinding.isDefinition && binding.isDefinition) {
+                fatal(`Redefinition of ${functionName}.`);
+            }
+
+            // But there can be multiple declarations.  We check if they have the same parameters and return type.
+            const isEquivalent =
+                previousBinding.nature === FUNCTION_NATURE
+                && equals(binding.parameters.map(p => p.type), previousBinding.parameters.map(p => p.type))
+                && equals(binding.returnType, previousBinding.returnType);
+
+            if (!isEquivalent) {
+                fatal(`Redeclaration of ${functionName} with different type.`);
+            }
+        });
 
         if (!isDefinition) {
             // This is only a declaration, we are done here.
@@ -219,7 +235,7 @@ function generateCode(topLevelStatements, writer, metadata) {
                 case '<':
                 case '>': {
 
-                    const copyFlag = { '<': 'ccf', '>': 'cof' }[operator.operator];
+                    const copyFlag = { '<': 'cff', '>': 'cof' }[operator.operator];
 
                     state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
                         computeExpression(lhsRegister, operator.lhs, state);
@@ -238,10 +254,10 @@ function generateCode(topLevelStatements, writer, metadata) {
 
                     const shouldNegate = operator.operator === '!=';
 
-                    state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
-                        computeExpression(lhsRegister, operator.lhs, state);
+                    state.callWithFreeRegister(rhsRegister => {
+                        computeExpression(destinationRegister, operator.lhs, state);
                         computeExpression(rhsRegister, operator.rhs, state);
-                        writer.test(lhsRegister, rhsRegister);
+                        writer.test(destinationRegister, rhsRegister);
                         state.borrowRegister(registers.dx, () => {
                             writer.czf();
                             writer.mov(destinationRegister, registers.dx);

@@ -16,9 +16,9 @@ class Scope {
         return error(name);
     }
 
-    bind(name, binding, error) {
+    bind(name, binding, alreadyBound) {
         if (this.bindings.hasOwnProperty(name)) {
-            error();
+            alreadyBound(this.bindings[name]);
         }
 
         this.bindings[name] = binding;
