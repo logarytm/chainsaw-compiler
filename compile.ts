@@ -1,8 +1,7 @@
-#!/usr/bin/env node
-const { parseFile } = require('./parse.js');
-const { isCompileError, showCompileError, traceParseTree } = require('./utility.js');
-const { generateCode } = require('./codegen.js');
-const { AssemblyWriter } = require('./assembly.js');
+const { parseFile } = require('./parse.ts');
+import { isCompileError, showCompileError, traceParseTree } from './utils';
+const { generateCode } = require('./codegen.ts');
+const { AssemblyWriter } = require('./assembly.ts');
 
 const cli = require('meow')(`
     Usage
@@ -20,7 +19,7 @@ const cli = require('meow')(`
 
 require('./tracing.js').setup(cli.flags.trace ? cli.flags.trace.split(',') : []);
 
-global.debugMode = cli.flags.debug;
+const debugMode = cli.flags.debug;
 const filename = cli.input[0];
 
 if (!cli.input.length) {

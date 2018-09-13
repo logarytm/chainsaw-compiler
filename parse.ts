@@ -6,7 +6,7 @@ const {
     writeFile,
     showCompileError,
     isOutOfDate,
-} = require('./utility');
+} = require('./utils.ts');
 
 const outputFilename = `${__dirname}/parse-generated.js`;
 const grammarFileName = `${__dirname}/parse.pegjs`;
@@ -35,9 +35,9 @@ if (isOutOfDate(grammarFileName, outputFilename)) {
     regenerate();
 }
 
-const parse = require(outputFilename).parse;
+export const parse = require(outputFilename).parse;
 
-function parseFile(filename) {
+export function parseFile(filename) {
     return parse(readFile(filename), {
         tracer: {
             trace(e) {
@@ -46,8 +46,3 @@ function parseFile(filename) {
         }
     });
 }
-
-
-exports.parse = parse;
-exports.parseFile = parseFile;
-

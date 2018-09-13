@@ -1,4 +1,7 @@
-class Scope {
+export class Scope {
+    private parent: any;
+    private bindings: any;
+
     constructor(parent = null) {
         this.parent = parent;
         this.bindings = {};

@@ -1,4 +1,4 @@
-exports.setup = (enabledTraces) => {
+exports.setup = function setup(enabledTraces) {
     global.tracing = {};
     global.tracing.enabledTraces = enabledTraces;
     global.tracing.traceHandlers = [(family, ...args) => {

@@ -1,4 +1,8 @@
-class AssemblyWriter {
+export class AssemblyWriter {
+    private output: Array<any>;
+    private reservations: Array<any>;
+    private labelno: number;
+
     constructor() {
         this.output = [];
         this.reservations = [];
@@ -141,8 +145,8 @@ class AssemblyWriter {
                     let label = null;
                     if (operand instanceof Label) {
                         label = operand;
-                    } else if ((operand instanceof Relative || operand instanceof Absolute) && operand.expression instanceof Label) {
-                        label = operand.expression;
+                    } else if ((operand instanceof Relative || operand instanceof Absolute) && operand.target instanceof Label) {
+                        label = operand.target;
                     }
 
                     if (label !== null) {
@@ -190,6 +194,8 @@ class AssemblyWriter {
 }
 
 class CommentLine {
+    private text: string;
+
     constructor(text) {
         this.text = text;
     }
@@ -200,6 +206,8 @@ class CommentLine {
 }
 
 class LabelLine {
+    public readonly label: Label;
+
     constructor(label) {
         this.label = label;
     }
@@ -210,6 +218,9 @@ class LabelLine {
 }
 
 class OpcodeLine {
+    public readonly opcode: string;
+    public readonly operands: Array<any>;
+
     constructor(opcode, operands) {
         this.opcode = opcode.toUpperCase();
         this.operands = operands;
@@ -220,7 +231,9 @@ class OpcodeLine {
     }
 }
 
-class Operand {
+export class Operand {
+    protected readonly expression: any;
+
     constructor(expression) {
         this.expression = expression;
     }
@@ -230,7 +243,7 @@ class Operand {
     }
 }
 
-class Label extends Operand {
+export class Label extends Operand {
     get name() {
         return this.expression;
     }
@@ -244,7 +257,7 @@ class Label extends Operand {
     }
 }
 
-class Register extends Operand {
+export class Register extends Operand {
     format() {
         return this.name;
     }
@@ -258,27 +271,28 @@ class Register extends Operand {
     }
 }
 
-class Immediate extends Operand {
+export class Immediate extends Operand {
     format() {
         return `(${this.expression})`;
     }
 }
 
-class Absolute extends Operand {
+export class Absolute extends Operand {
     format() {
         return `<${this.expression.format()}>`;
     }
-}
 
-class Relative extends Operand {
-    format() {
-        return `[${this.expression.format()}]`;
+    get target(): any {
+        return this.expression;
     }
 }
 
-exports.AssemblyWriter = AssemblyWriter;
-exports.Label = Label;
-exports.Register = Register;
-exports.Absolute = Absolute;
-exports.Relative = Relative;
-exports.Immediate = Immediate;
+export class Relative extends Operand {
+    format() {
+        return `[${this.expression.format()}]`;
+    }
+
+    get target(): any {
+        return this.expression;
+    }
+}

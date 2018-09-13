@@ -1,6 +1,6 @@
-const { Register } = require('./assembly.js');
+import { AssemblyWriter, Register } from './assembly';
 
-const registers = {
+export const registers = {
     ax: new Register('AX'),
     bx: new Register('BX'),
     cx: new Register('CX'),
@@ -8,7 +8,13 @@ const registers = {
     bp: new Register('BP'),
 };
 
-class RegisterAllocator {
+export class RegisterAllocator {
+    private assemblyWriter: AssemblyWriter;
+    private nextUnallocated: number;
+    private firstInaccessible: number;
+    private maxUsed: number;
+    private all: Register[];
+
     constructor(assemblyWriter) {
         this.assemblyWriter = assemblyWriter;
 
@@ -93,6 +99,3 @@ class RegisterAllocator {
         return result;
     }
 }
-
-exports.registers = registers;
-exports.RegisterAllocator = RegisterAllocator;

@@ -1,7 +1,6 @@
-const { Register, Relative, Immediate } = require('./assembly.js');
-const { CompileError } = require('./utility.js');
+import { Register, Relative } from './assembly';
 
-function getReservationSize(type) {
+export function getReservationSize(type) {
     switch (type.kind) {
     case 'NamedType':
     case 'PointerType':
@@ -15,8 +14,18 @@ function getReservationSize(type) {
     }
 }
 
-class StdcallConvention {
-    validateDeclaration(declaration) {
+interface ICallingConvention {
+    validateDeclaration(binding, state);
+
+    emitCall(binding, args, state);
+
+    emitPrologue(binding, args, state);
+
+    emitEpilogue(binding, args, state);
+}
+
+class StdcallConvention implements ICallingConvention {
+    validateDeclaration(binding, state) {
     }
 
     emitCall(binding, args, state) {
@@ -37,15 +46,15 @@ class StdcallConvention {
     }
 
     emitPrologue(binding, parameterBindings, state) {
-        // FIXME(abi): Load parameter carries!
     }
 
     emitEpilogue(binding, parameterBindings, state) {
-        // FIXME(abi): Restore parameter carries!
     }
 }
 
-class FastcallConvention {
+class FastcallConvention implements ICallingConvention {
+    private registers: Register[];
+
     constructor() {
         this.registers = [new Register('ax'), new Register('bx'), new Register('cx'), new Register('dx')];
     }
@@ -79,9 +88,12 @@ class FastcallConvention {
             });
         }
     }
+
+    emitEpilogue(binding, parameterBindings, state) {
+    }
 }
 
-function createCallingConvention(name) {
+export function createCallingConvention(name) {
     switch (name) {
     case 'stdcall':
         return new StdcallConvention();
@@ -93,6 +105,3 @@ function createCallingConvention(name) {
         throw new Error(`Unimplemented calling convention: ${name}.`);
     }
 }
-
-exports.getReservationSize = getReservationSize;
-exports.createCallingConvention = createCallingConvention;

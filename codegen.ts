@@ -1,9 +1,13 @@
-const R = require('ramda');
-const { Scope } = require('./scope.js');
-const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
-const { CompileError, showCompileError, showLocation, nodesEqual } = require('./utility.js');
-const { registers, RegisterAllocator } = require('./register.js');
-const { getReservationSize, createCallingConvention } = require('./abi.js');
+import R from 'ramda';
+import { CompileError, nodesEqual, showCompileError, showLocation } from './utils';
+import { createCallingConvention, getReservationSize } from './abi';
+import { Immediate, Relative } from './assembly';
+import { RegisterAllocator, registers } from './register';
+import { Scope } from './scope';
+
+declare global {
+    const tracing: any;
+}
 
 /**
  * These values are assigned to names in the scope.  For example, every function declaration has FUNCTION_NATURE, and
@@ -13,7 +17,7 @@ const FUNCTION_NATURE = Symbol('function');
 const VARIABLE_NATURE = Symbol('variable');
 const PARAMETER_NATURE = Symbol('parameter');
 
-function generateCode(topLevelStatements, writer, metadata) {
+export function generateCode(topLevelStatements, writer, metadata) {
     const result = { success: true };
     const stack = [];
     const rootScope = new Scope();
@@ -431,7 +435,7 @@ function generateCode(topLevelStatements, writer, metadata) {
         check(kinds.includes(node.kind), message);
     }
 
-    function mandatory() {
+    function mandatory(): any {
         throw new Error('Missing argument. This is a bug.');
     }
 
@@ -472,5 +476,3 @@ function generateCode(topLevelStatements, writer, metadata) {
 
     return result;
 }
-
-exports.generateCode = generateCode;

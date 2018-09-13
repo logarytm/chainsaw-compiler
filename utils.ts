@@ -1,7 +1,14 @@
-const fs = require('fs');
-const util = require('util');
+import * as fs from 'fs';
+import * as util from 'util';
 
-class CompileError extends Error {
+declare global {
+    const trace: (...args: any[]) => void;
+}
+
+export class CompileError extends Error {
+    private location: object;
+    private filename: string;
+
     constructor(message, location, filename = null) {
         super(message);
         this.location = location;
@@ -9,7 +16,7 @@ class CompileError extends Error {
     }
 }
 
-function inspect(value) {
+export function inspect(value) {
     console.log(util.inspect(value, {
         showHidden: false,
         depth: null,
@@ -18,11 +25,11 @@ function inspect(value) {
     }));
 }
 
-function lastModified(filename) {
+export function lastModified(filename) {
     return fs.statSync(filename).mtime;
 }
 
-function isOutOfDate(prerequisiteFilename, targetFilename) {
+export function isOutOfDate(prerequisiteFilename, targetFilename) {
     try {
         return lastModified(prerequisiteFilename) > lastModified(targetFilename);
     } catch (error) {
@@ -30,7 +37,7 @@ function isOutOfDate(prerequisiteFilename, targetFilename) {
     }
 }
 
-function showLocation(location) {
+export function showLocation(location) {
     if (!isProperObject(location)) {
         return '??';
     }
@@ -42,19 +49,16 @@ function showLocation(location) {
     return `${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
 }
 
-function isCompileError(error) {
+export function isCompileError(error) {
     return error.name === 'SyntaxError' || error.constructor.name === 'SyntaxError'
         || error.constructor.name === 'CompileError';
 }
 
-function showCompileError(error) {
-    console.error(`${error.filename || 'stdin'}:${showLocation(error.location)}: ${error.message}`);
-    if (global.debugMode) {
-        inspect(error);
-    }
+export function showCompileError(error) {
+    console.error(`${error.filename || 'stdin'}:${showLocation(error.location)}: ${error}`);
 }
 
-function traceParseTree(nodes, level = 0, { indentFirstLine = true } = {}) {
+export function traceParseTree(nodes, level = 0, { indentFirstLine = true } = {}) {
     const isInterestingProperty = k => k !== 'kind' && k !== 'location' && k !== 'toString';
 
     if (!Array.isArray(nodes)) {
@@ -85,15 +89,15 @@ function traceParseTree(nodes, level = 0, { indentFirstLine = true } = {}) {
     });
 }
 
-function isProperObject(value) {
+export function isProperObject(value) {
     return typeof value === 'object' && value !== null;
 }
 
-function isNode(object) {
+export function isNode(object) {
     return isProperObject(object) && typeof object.kind === 'string';
 }
 
-function nodesEqual(a, b) {
+export function nodesEqual(a, b) {
     const performDeepComparison = isProperObject(a) && isProperObject(b);
 
     if (performDeepComparison) {
@@ -109,16 +113,6 @@ function nodesEqual(a, b) {
     return a === b;
 }
 
-exports.CompileError = CompileError;
-exports.readFile = (filename) => fs.readFileSync(filename, 'utf8');
-exports.writeFile = fs.writeFileSync;
-exports.lastModified = lastModified;
-exports.isOutOfDate = isOutOfDate;
-exports.inspect = inspect;
-exports.showLocation = showLocation;
-exports.isCompileError = isCompileError;
-exports.showCompileError = showCompileError;
-exports.traceParseTree = traceParseTree;
-exports.isProperObject = isProperObject;
-exports.isNode = isNode;
-exports.nodesEqual = nodesEqual;
+export function readFile(filename): string {
+    return fs.readFileSync(filename, 'UTF-8');
+}
