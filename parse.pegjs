@@ -267,7 +267,7 @@ FunctionStatement
         return tree.VariableDeclaration({
             variableName,
             variableType,
-            initialValue: get(initialValue, 3, null),
+            initialValue: get(initialValue, 2, null),
         });
     }
     / statement: Statement

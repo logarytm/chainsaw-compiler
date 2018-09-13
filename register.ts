@@ -21,7 +21,7 @@ export class RegisterAllocator {
         /**
          * List of all general-purpose registers that can be used to compute expressions.
          */
-        this.all = [registers.ax, registers.bx, registers.cx, registers.dx];
+        this.all = [registers.ax, registers.bx, registers.dx];
 
         /**
          * Index of the next unallocated register in the above array.  If this is equal to the number of all registers,

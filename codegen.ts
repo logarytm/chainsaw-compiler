@@ -1,7 +1,7 @@
-import R from 'ramda';
-import { CompileError, nodesEqual, showCompileError, showLocation } from './utils';
+import * as R from 'ramda';
+import { CompileError, generateUniqueId, nodesEqual, showCompileError, showLocation } from './utils';
 import { createCallingConvention, getReservationSize } from './abi';
-import { Immediate, Relative } from './assembly';
+import { Immediate, Label, Relative } from './assembly';
 import { RegisterAllocator, registers } from './register';
 import { Scope } from './scope';
 
@@ -17,10 +17,12 @@ const FUNCTION_NATURE = Symbol('function');
 const VARIABLE_NATURE = Symbol('variable');
 const PARAMETER_NATURE = Symbol('parameter');
 
-export function generateCode(topLevelStatements, writer, metadata) {
+export function generateCode(topLevelStatements, writer, options) {
     const result = { success: true };
     const stack = [];
     const rootScope = new Scope();
+
+    let stringCounter = 0;
 
     function generateFunctionDeclinition(declinition, state) {
         checkNodeKind(declinition, ['FunctionDefinition', 'FunctionDeclaration']);
@@ -52,6 +54,7 @@ export function generateCode(topLevelStatements, writer, metadata) {
         binding.callingConvention.validateDeclaration(binding, state);
 
         state.scope.bind(functionName, binding, function alreadyBound(previousBinding) {
+
             // There can never be more than one definition.
             if (previousBinding.isDefinition && binding.isDefinition) {
                 fatal(`Redefinition of ${functionName}.`);
@@ -67,6 +70,7 @@ export function generateCode(topLevelStatements, writer, metadata) {
         });
 
         if (!isDefinition) {
+
             // This is only a declaration, we are done here.
             return;
         }
@@ -135,6 +139,7 @@ export function generateCode(topLevelStatements, writer, metadata) {
     function generateExpressionStatement(statement, state) {
         const expression = statement.expression;
         state.callWithFreeRegister(register => {
+
             // TODO(optimize): omit calculation if expression has no side effects
             computeExpression(register, expression, state);
         });
@@ -184,7 +189,7 @@ export function generateCode(topLevelStatements, writer, metadata) {
         writer.ret();
     }
 
-    function computeExpression(destinationRegister, expression, state = mandatory()) {
+    function computeExpression(destinationRegister, expression, state) {
         match(expression, {
             FunctionApplication(application) {
                 check(application.function.kind === 'Identifier', `Calling expressions as functions is not implemented.`);
@@ -347,6 +352,14 @@ export function generateCode(topLevelStatements, writer, metadata) {
             Number({ value }) {
                 writer.mov(destinationRegister, new Immediate(value));
             },
+
+            String({ string }) {
+                const encoded = [...string].map(c => c.charCodeAt());
+                const id = 'S' + stringCounter++;
+                const label = writer.reserve(id, string.length, [string.length, ...encoded]);
+
+                writer.opcode('lea', destinationRegister, new Relative(label));
+            },
         });
     }
 
@@ -359,7 +372,7 @@ export function generateCode(topLevelStatements, writer, metadata) {
         },
 
         createError(message) {
-            return new CompileError(message, top().location, metadata.filename);
+            return new CompileError(message, top().location, options.filename);
         },
 
         registerAllocator: new RegisterAllocator(writer),
@@ -435,10 +448,6 @@ export function generateCode(topLevelStatements, writer, metadata) {
         check(kinds.includes(node.kind), message);
     }
 
-    function mandatory(): any {
-        throw new Error('Missing argument. This is a bug.');
-    }
-
     //endregion
 
     //region Tree traversal
@@ -446,11 +455,11 @@ export function generateCode(topLevelStatements, writer, metadata) {
         return R.last(stack);
     }
 
-    function into(fn, node, state = mandatory()) {
+    function into(fn, node, state) {
         return descend(fn, state)(node);
     }
 
-    function descend(fn, state = mandatory()) {
+    function descend(fn, state) {
         return node => {
             trace('traverse', 'enter', node.kind, showLocation(node.location));
             stack.push(node);

@@ -29,6 +29,10 @@ export function lastModified(filename) {
     return fs.statSync(filename).mtime;
 }
 
+export function generateUniqueId() {
+    return (((1 + Math.random()) * 0x1_0000_0000) | 0).toString(16).substring(1).padStart(8, '0');
+}
+
 export function isOutOfDate(prerequisiteFilename, targetFilename) {
     try {
         return lastModified(prerequisiteFilename) > lastModified(targetFilename);
@@ -115,4 +119,8 @@ export function nodesEqual(a, b) {
 
 export function readFile(filename): string {
     return fs.readFileSync(filename, 'UTF-8');
+}
+
+export function writeFile(filename, content: string) {
+    fs.writeFileSync(filename, content, { encoding: 'UTF-8' });
 }

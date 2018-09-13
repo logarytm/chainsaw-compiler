@@ -60,7 +60,7 @@ export class AssemblyWriter {
         });
     }
 
-    reserve(name, size = 1, data = []) {
+    reserve(name, size = 1, data = []): Label {
         size = Math.max(data.length, size, 1);
         while (data.length < size) {
             data.push(0);
