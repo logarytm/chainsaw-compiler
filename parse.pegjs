@@ -246,7 +246,7 @@ ParameterList
 
 NameTypePair
     = name: Identifier __ type: Type
-    { return { name, type }; }
+    { return tree.NameTypePair({ name, type }); }
 
 Body
     = "{" _ statements: (Statement _)* "}"

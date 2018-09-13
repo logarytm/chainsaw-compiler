@@ -1,19 +1,24 @@
 #!/usr/bin/env node
 const { parseFile } = require('./parse.js');
-const {  isCompileError, showCompileError } = require('./utility.js');
+const { isCompileError, showCompileError, traceParseTree } = require('./utility.js');
 const { generateCode } = require('./codegen.js');
 const { AssemblyWriter } = require('./assembly.js');
 
 const cli = require('meow')(`
     Usage
-        $ node compile.js <file> [--debug] [--traces <families>]
+        $ node compile.js <filename> [--debug] [--trace <families>] [--show-parse-tree]
 `, {
-    alias: {
-        d: 'debug',
+    flags: {
+        'trace': {
+            type: 'string',
+        },
+        'show-parse-tree': {
+            type: 'boolean',
+        },
     },
 });
 
-require('./tracing.js').setup(cli.flags.traces ? cli.flags.traces.split(',') : []);
+require('./tracing.js').setup(cli.flags.trace ? cli.flags.trace.split(',') : []);
 
 global.debugMode = cli.flags.debug;
 const filename = cli.input[0];
@@ -25,6 +30,10 @@ if (!cli.input.length) {
 
 try {
     const topLevelStatements = parseFile(filename);
+    if (cli.flags.showParseTree) {
+        traceParseTree(topLevelStatements);
+    }
+
     const assemblyWriter = new AssemblyWriter();
     const result = generateCode(topLevelStatements, assemblyWriter, {
         filename,

@@ -1,7 +1,7 @@
 const R = require('ramda');
 const { Scope } = require('./scope.js');
 const { Register, Absolute, Relative, Immediate, Label } = require('./assembly.js');
-const { CompileError, showCompileError, showLocation, equals } = require('./utility.js');
+const { CompileError, showCompileError, showLocation, nodesEqual } = require('./utility.js');
 const { registers, RegisterAllocator } = require('./register.js');
 const { getReservationSize, createCallingConvention } = require('./abi.js');
 
@@ -56,12 +56,10 @@ function generateCode(topLevelStatements, writer, metadata) {
             // But there can be multiple declarations.  We check if they have the same parameters and return type.
             const isEquivalent =
                 previousBinding.nature === FUNCTION_NATURE
-                && equals(binding.parameters.map(p => p.type), previousBinding.parameters.map(p => p.type))
-                && equals(binding.returnType, previousBinding.returnType);
+                && nodesEqual(binding.parameters.map(p => p.type), previousBinding.parameters.map(p => p.type))
+                && nodesEqual(binding.returnType, previousBinding.returnType);
 
-            if (!isEquivalent) {
-                fatal(`Redeclaration of ${functionName} with different type.`);
-            }
+            check(isEquivalent, `Redeclaration of ${functionName} with different type.`);
         });
 
         if (!isDefinition) {
@@ -185,9 +183,7 @@ function generateCode(topLevelStatements, writer, metadata) {
     function computeExpression(destinationRegister, expression, state = mandatory()) {
         match(expression, {
             FunctionApplication(application) {
-                if (application.function.kind !== 'Identifier') {
-                    throw new Error(`Calling expressions as functions is not implemented.`);
-                }
+                check(application.function.kind === 'Identifier', `Calling expressions as functions is not implemented.`);
 
                 const functionName = application.function.name;
                 const binding = state.scope.lookup(functionName, () => {
@@ -234,7 +230,6 @@ function generateCode(topLevelStatements, writer, metadata) {
                     //region Relational operators
                 case '<':
                 case '>': {
-
                     const copyFlag = { '<': 'cff', '>': 'cof' }[operator.operator];
 
                     state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
@@ -251,7 +246,6 @@ function generateCode(topLevelStatements, writer, metadata) {
 
                 case '==':
                 case '!=': {
-
                     const shouldNegate = operator.operator === '!=';
 
                     state.callWithFreeRegister(rhsRegister => {
@@ -272,7 +266,6 @@ function generateCode(topLevelStatements, writer, metadata) {
 
                     //region Assignment operators
                 case '=': {
-
                     let lhsOperand = null;
 
                     switch (operator.lhs.kind) {
@@ -306,8 +299,8 @@ function generateCode(topLevelStatements, writer, metadata) {
                     const opcode = {
                         '+': 'add',
                         '-': 'sub',
-                        '*': 'Smul6',
-                        '/': 'Sdiv6',
+                        '*': 'sys mul6',
+                        '/': 'sys div6',
                         '&': 'and',
                     }[operator.operator];
 
@@ -438,10 +431,6 @@ function generateCode(topLevelStatements, writer, metadata) {
         check(kinds.includes(node.kind), message);
     }
 
-    function redefinition(symbol) {
-        return () => fatal(`Redefinition of "${symbol}".`);
-    }
-
     function mandatory() {
         throw new Error('Missing argument. This is a bug.');
     }
@@ -473,7 +462,7 @@ function generateCode(topLevelStatements, writer, metadata) {
 
     function match(node, mappings) {
         if (!mappings.hasOwnProperty(node.kind)) {
-            throw new Error(`match: unhandled node kind ${node.kind}`);
+            throw new Error(`match(): Unhandled node kind: ${node.kind}.`);
         }
 
         mappings[node.kind](node);
