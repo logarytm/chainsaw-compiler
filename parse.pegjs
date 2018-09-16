@@ -40,7 +40,7 @@
 
     const reservedWords = [
         'if', 'unless', 'fn', 'not', 'and', 'or', 'while', 'until', 'return',
-        'var', 'const'
+        'var', 'const', 'asm',
     ];
 
     const emptyBody = tree.Body({ statements: [] });
@@ -308,8 +308,22 @@ Statement
             body,
         });
     }
+    /   assembler: InlineAssembler
+    {
+        return assembler;
+    }
     / expression: Expression _ StatementTerminator
     { return tree.ExpressionStatement({ expression }); }
+
+InlineAssembler
+    = "asm" instructions: AssemblerInstruction* "endasm"
+    {
+        return tree.InlineAssembler({ instructions: toString(instructions) });
+    }
+
+AssemblerInstruction
+    = ! "endasm" data: (.)
+    { return data; }
 
 EmptyStatement
     = StatementTerminator

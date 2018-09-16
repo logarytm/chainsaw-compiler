@@ -37,6 +37,10 @@ export class AssemblyWriter {
         this.output.push(new OpcodeLine(opcode, operands));
     }
 
+    raw(instructions) {
+        this.output.push(new RawLine(instructions));
+    }
+
     dump() {
         this.output.forEach(line => {
             if (process.stdout.isTTY) {
@@ -190,6 +194,22 @@ export class AssemblyWriter {
         }
 
         this.output = newOutput;
+    }
+}
+
+class RawLine {
+    private text: string;
+
+    constructor(text) {
+        this.text = text;
+    }
+
+    format() {
+        return this.text
+            .trim()
+            .split('\n')
+            .map(x => `    ` + x.trim())
+            .join('\n');
     }
 }
 

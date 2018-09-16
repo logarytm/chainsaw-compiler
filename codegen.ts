@@ -133,7 +133,12 @@ export function generateCode(topLevelStatements, writer, options) {
             LoopingStatement: descend(generateLoopingStatement, state),
             ReturnStatement: descend(generateReturnStatement, state),
             ExpressionStatement: descend(generateExpressionStatement, state),
+            InlineAssembler: descend(generateInlineAssembler, state),
         });
+    }
+
+    function generateInlineAssembler(assembler, state) {
+        writer.raw(assembler.instructions);
     }
 
     function generateExpressionStatement(statement, state) {
