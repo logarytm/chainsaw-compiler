@@ -103,7 +103,7 @@ export function generateCode(topLevelStatements, writer, options) {
         binding.callingConvention.emitEpilogue(binding, parameterBindings, state);
         trace('function-epilogue', 'end', functionName);
 
-        writer.ret();
+        writer.opcode('ret');
     }
 
     function generateVariableDeclaration(declaration, state) {
@@ -121,7 +121,7 @@ export function generateCode(topLevelStatements, writer, options) {
 
             state.callWithFreeRegister(register => {
                 computeExpression(register, declaration.initialValue, state);
-                writer.mov(new Relative(label), register);
+                writer.opcode('mov', new Relative(label), register);
             });
         }
     }
@@ -157,11 +157,11 @@ export function generateCode(topLevelStatements, writer, options) {
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
 
-            writer.cmp(predicateRegister, predicateRegister);
-            writer.jz(new Relative(elseLabel));
+            writer.opcode('cmp', predicateRegister, predicateRegister);
+            writer.opcode('jz', new Relative(elseLabel));
 
             into(generateBody, statement.thenBranch, state);
-            writer.jmp(new Relative(afterLabel));
+            writer.opcode('jmp', new Relative(afterLabel));
             writer.label(elseLabel);
 
             into(generateBody, statement.elseBranch, state);
@@ -176,11 +176,11 @@ export function generateCode(topLevelStatements, writer, options) {
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
 
-            writer.cmp(predicateRegister, predicateRegister);
-            writer.jz(new Relative(exit));
+            writer.opcode('cmp', predicateRegister, predicateRegister);
+            writer.opcode('jz', new Relative(exit));
 
             into(generateBody, statement.body, state);
-            writer.jmp(new Relative(start));
+            writer.opcode('jmp', new Relative(start));
             writer.label(exit);
         });
     }
@@ -191,7 +191,7 @@ export function generateCode(topLevelStatements, writer, options) {
 
     function generateReturnStatement(rs, state) {
         computeExpression(registers.ax, rs.expression, state);
-        writer.ret();
+        writer.opcode('ret');
     }
 
     function computeExpression(destinationRegister, expression, state) {
@@ -220,7 +220,7 @@ export function generateCode(topLevelStatements, writer, options) {
                     computeExpression(offsetRegister, dereference.offset, state);
 
                     writer.opcode('add', arrayRegister, offsetRegister);
-                    writer.mov(destinationRegister, new Relative(arrayRegister));
+                    writer.opcode('mov', destinationRegister, new Relative(arrayRegister));
                 });
             },
 
@@ -229,7 +229,7 @@ export function generateCode(topLevelStatements, writer, options) {
                 case 'not':
                     state.borrowRegister(destinationRegister, () => {
                         computeExpression(destinationRegister, operator.operand, state);
-                        writer.not(destinationRegister);
+                        writer.opcode('not', destinationRegister);
                     });
                     break;
 
@@ -249,10 +249,10 @@ export function generateCode(topLevelStatements, writer, options) {
                     state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
                         computeExpression(lhsRegister, operator.lhs, state);
                         computeExpression(rhsRegister, operator.rhs, state);
-                        writer.cmp(lhsRegister, rhsRegister);
+                        writer.opcode('cmp', lhsRegister, rhsRegister);
                         state.borrowRegister(registers.dx, () => {
                             writer.opcode(copyFlag);
-                            writer.mov(destinationRegister, registers.dx);
+                            writer.opcode('mov', destinationRegister, registers.dx);
                         });
                     });
                     break;
@@ -265,12 +265,12 @@ export function generateCode(topLevelStatements, writer, options) {
                     state.callWithFreeRegister(rhsRegister => {
                         computeExpression(destinationRegister, operator.lhs, state);
                         computeExpression(rhsRegister, operator.rhs, state);
-                        writer.test(destinationRegister, rhsRegister);
+                        writer.opcode('test', destinationRegister, rhsRegister);
                         state.borrowRegister(registers.dx, () => {
-                            writer.czf();
-                            writer.mov(destinationRegister, registers.dx);
+                            writer.opcode('czf');
+                            writer.opcode('mov', destinationRegister, registers.dx);
                             if (shouldNegate) {
-                                writer.not(destinationRegister);
+                                writer.opcode('not', destinationRegister);
                             }
                         });
                     });
@@ -298,7 +298,7 @@ export function generateCode(topLevelStatements, writer, options) {
 
                     state.callWithFreeRegister(rhsRegister => {
                         computeExpression(rhsRegister, operator.rhs, state);
-                        writer.mov(lhsOperand, rhsRegister);
+                        writer.opcode('mov', lhsOperand, rhsRegister);
                     });
                     break;
                 }
@@ -336,12 +336,12 @@ export function generateCode(topLevelStatements, writer, options) {
                 // Handle pre-defined identifiers.
                 switch (name) {
                 case 'true': {
-                    writer.mov(destinationRegister, new Immediate(1));
+                    writer.opcode('mov', destinationRegister, new Immediate(1));
                     return;
                 }
 
                 case 'false': {
-                    writer.mov(destinationRegister, new Immediate(0));
+                    writer.opcode('mov', destinationRegister, new Immediate(0));
                     return;
                 }
                 }
@@ -351,11 +351,11 @@ export function generateCode(topLevelStatements, writer, options) {
                 });
 
                 check(binding.nature === VARIABLE_NATURE || binding.nature === PARAMETER_NATURE, `${name} is not an l-value.`);
-                writer.mov(destinationRegister, new Relative(binding.label));
+                writer.opcode('mov', destinationRegister, new Relative(binding.label));
             },
 
             Number({ value }) {
-                writer.mov(destinationRegister, new Immediate(value));
+                writer.opcode('mov', destinationRegister, new Immediate(value));
             },
 
             String({ string }) {

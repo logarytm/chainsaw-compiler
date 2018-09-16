@@ -88,58 +88,6 @@ export class AssemblyWriter {
         // this.optimizeUnusedLabels();
     }
 
-    mov(where, what) {
-        this.opcode('mov', where, what);
-    }
-
-    push(what) {
-        this.opcode('push', what);
-    }
-
-    pop(what) {
-        this.opcode('pop', what);
-    }
-
-    ret() {
-        this.opcode('ret');
-    }
-
-    not(what) {
-        this.opcode('not', what);
-    }
-
-    cmp(lhs, rhs) {
-        this.opcode('cmp', lhs, rhs);
-    }
-
-    test(lhs, rhs) {
-        this.opcode('test', lhs, rhs);
-    }
-
-    cff() {
-        this.opcode('cff');
-    }
-
-    cof() {
-        this.opcode('cof');
-    }
-
-    czf() {
-        this.opcode('czf');
-    }
-
-    jmp(label) {
-        this.opcode('jmp', label);
-    }
-
-    jz(label) {
-        this.opcode('jz', label);
-    }
-
-    sub(lhs, rhs) {
-        this.opcode('sub', lhs, rhs);
-    }
-
     optimizeUnusedLabels() {
         const used = new Set();
 
