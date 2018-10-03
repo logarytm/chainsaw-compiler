@@ -316,7 +316,7 @@ Statement
     { return tree.ExpressionStatement({ expression }); }
 
 InlineAssembler
-    = "asm" instructions: AssemblerInstruction* "endasm"
+    = "asm" instructions: AssemblerInstruction* "endasm" _
     {
         return tree.InlineAssembler({ instructions: toString(instructions) });
     }
@@ -414,6 +414,26 @@ Number
     { return tree.Number({ value: toInteger(digits, 2) }); }
     / digits: Digits
     { return tree.Number({ value: toInteger(digits, 10) }); }
+    / "'" c: StandaloneCharacter "'"
+    { return tree.Number({ value: c.codePointAt() }); }
+
+StandaloneCharacter
+    = "\\\\"
+    { return "\\"; }
+    / "\\'"
+    { return "'"; }
+    / "\\n"
+    { return "\n"; }
+    / "\\r"
+    { return "\r"; }
+    / "\\t"
+    { return "\t"; }
+    / "\\b"
+    { return "\b"; }
+    / "\\x" digits: ([0-9a-fA-F][0-9a-fA-F])
+    { return String.fromCharCode(toInteger(digits, 16)); }
+    / c: [^"]
+    { return c; }
 
 String
     = '"' string: StringCharacter* '"'
@@ -448,7 +468,7 @@ _
     = __?
 
 __
-    = ([ \n\r\t]*) Comment ([ \n\r\t]*)
+    = ([ \n\r\t]*) Comment+ ([ \n\r\t]*)
     / Whitespace
 
 ConditionalKeyword = "if" / "unless"

@@ -1,4 +1,5 @@
 import { Register, Relative } from './assembly';
+import './utils';
 
 export function getReservationSize(type) {
     switch (type.kind) {
@@ -32,7 +33,7 @@ class StdcallConvention implements ICallingConvention {
         for (let argument of args) {
             state.callWithFreeRegister(register => {
                 state.computeExpressionIntoRegister(register, argument, state);
-                state.assemblyWriter.push(register);
+                state.assemblyWriter.opcode('push', register);
             });
         }
 
@@ -40,7 +41,7 @@ class StdcallConvention implements ICallingConvention {
 
         trace('stdcall', 'caller-cleanup', 'start');
         state.callWithFreeRegister(register => {
-            state.assemblyWriter.pop(register);
+            state.assemblyWriter.opcode('pop', register);
         });
         trace('stdcall', 'caller-cleanup', 'end');
     }
@@ -84,7 +85,7 @@ class FastcallConvention implements ICallingConvention {
     emitPrologue(binding, parameterBindings, state) {
         if (binding.parameters.length) {
             binding.parameters.forEach((parameter, i) => {
-                state.assemblyWriter.mov(parameterBindings[parameter.name].label, this.registers[i]);
+                state.assemblyWriter.opcode('mov', parameterBindings[parameter.name].label, this.registers[i]);
             });
         }
     }

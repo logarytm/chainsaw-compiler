@@ -1,4 +1,5 @@
 import { AssemblyWriter, Register } from './assembly';
+import './utils';
 
 export const registers = {
     ax: new Register('AX'),
@@ -52,9 +53,9 @@ export class RegisterAllocator {
         trace('register-borrowing', 'start', register.name);
 
         // Otherwise, save on the stack.
-        this.assemblyWriter.push(register);
+        this.assemblyWriter.opcode('push', register);
         const result = fn();
-        this.assemblyWriter.pop(register);
+        this.assemblyWriter.opcode('pop', register);
 
         trace('register-borrowing', 'end', register.name);
 
@@ -87,13 +88,13 @@ export class RegisterAllocator {
         const register = this.all[this.nextUnallocated % this.maxUsed];
 
         trace('register-allocation', 'start', register.name);
-        this.assemblyWriter.push(register);
+        this.assemblyWriter.opcode('pop', register);
         this.nextUnallocated++;
 
         const result = fn(register);
 
         trace('register-allocation', 'end', register.name);
-        this.assemblyWriter.pop(register);
+        this.assemblyWriter.opcode('pop', register);
         this.nextUnallocated--;
 
         return result;

@@ -10,6 +10,6 @@ fn memset(array pword, value word, count word) word {
 }
 
 fn main() void {
-    var array [10]word = 0;
+    var array [10]word;
     memset(array, 2137, 0);
 }
