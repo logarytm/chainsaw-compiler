@@ -211,8 +211,8 @@ FunctionDeclaration
 FunctionDefinition
     =
         "fn" _
-        functionName: Identifier _
         callingConvention: CallingConventionSpecifier _
+        functionName: Identifier _
         parameters: ParameterList _
         returnType: Type _
         body: FunctionBody _
@@ -468,8 +468,7 @@ _
     = __?
 
 __
-    = ([ \n\r\t]*) Comment+ ([ \n\r\t]*)
-    / Whitespace
+    = (Comment / Whitespace)+
 
 ConditionalKeyword = "if" / "unless"
 LoopingKeyword = "while" / "until"
