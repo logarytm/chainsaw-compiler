@@ -13,7 +13,7 @@ export class AssemblyWriter {
         this.output.push(new CommentLine(text));
     }
 
-    prepareLabel(name = null) {
+    createLabel(name = null) {
         if (name === null) {
             name = `L${this.labelno}$`;
             this.labelno++;
@@ -22,12 +22,12 @@ export class AssemblyWriter {
         return new Label(name);
     }
 
-    label(label) {
+    label(label: Label) {
         this.output.push(new LabelLine(label));
     }
 
-    labelHere(name = null) {
-        const label = this.prepareLabel(name);
+    createAndEmitLabel(name = null) {
+        const label = this.createLabel(name);
         this.label(label);
 
         return label;

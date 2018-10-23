@@ -1,5 +1,5 @@
 /* calculates fibonacci sequence */
-fn fibonacci(n word) word {
+fn fib(n word) word {
 	/* termination */
 	if n == 0 or n == 1 {
 		return 1;

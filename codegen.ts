@@ -45,7 +45,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
 
         const isDefinition = declinition.kind === 'FunctionDefinition';
         const functionName = declinition.functionName;
-        const label = writer.prepareLabel(functionName);
+        const label = writer.createLabel(functionName);
 
         /**
          * Create a binding.  The convention is that whenever a name is declared, we store the following information
@@ -167,8 +167,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
     }
 
     function generateConditionalStatement(statement, state) {
-        const elseLabel = writer.prepareLabel();
-        const afterLabel = writer.prepareLabel();
+        const elseLabel = writer.createLabel();
+        const afterLabel = writer.createLabel();
 
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
@@ -186,8 +186,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
     }
 
     function generateLoopingStatement(statement, state) {
-        const start = writer.labelHere();
-        const exit = writer.prepareLabel();
+        const start = writer.createAndEmitLabel();
+        const exit = writer.createLabel();
 
         state.callWithFreeRegister(predicateRegister => {
             computeExpression(predicateRegister, statement.predicate, state);
@@ -292,6 +292,34 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
                     });
                     break;
                 }
+
+                    //endregion
+
+                    //region Logical operators
+                case 'or':
+                    state.callWithFreeRegister(rhsRegister => {
+                        const exit = writer.createLabel();
+
+                        computeExpression(destinationRegister, operator.lhs, state);
+                        writer.opcode('test', destinationRegister, new Immediate(0));
+                        writer.opcode('jnz', exit);
+                        computeExpression(destinationRegister, operator.rhs, state);
+                        writer.label(exit);
+                    });
+                    break;
+
+                case 'and':
+                    state.callWithFreeRegister(rhsRegister => {
+                        const exit = writer.createLabel();
+
+                        computeExpression(destinationRegister, operator.lhs, state);
+                        writer.opcode('test', destinationRegister, new Immediate(0));
+                        writer.opcode('jz', exit);
+                        computeExpression(destinationRegister, operator.rhs, state);
+                        writer.label(exit);
+                    });
+                    break;
+
                     //endregion
 
                     //region Assignment operators
