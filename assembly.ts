@@ -1,6 +1,6 @@
 export class AssemblyWriter {
-    private output: Array<any>;
-    private reservations: Array<any>;
+    private output: Array<ILine>;
+    private reservations: Array<{ name: string, size: number, data: number[] }>;
     private labelno: number;
 
     constructor() {
@@ -84,8 +84,8 @@ export class AssemblyWriter {
             return;
         }
 
-        // this.optimizeSpuriousSaves();
-        // this.optimizeUnusedLabels();
+        this.optimizeSpuriousSaves();
+        this.optimizeUnusedLabels();
     }
 
     optimizeUnusedLabels() {
@@ -145,7 +145,11 @@ export class AssemblyWriter {
     }
 }
 
-class RawLine {
+interface ILine {
+    format(): string;
+}
+
+class RawLine implements ILine {
     private text: string;
 
     constructor(text) {
@@ -161,7 +165,7 @@ class RawLine {
     }
 }
 
-class CommentLine {
+class CommentLine implements ILine {
     private text: string;
 
     constructor(text) {
@@ -173,7 +177,7 @@ class CommentLine {
     }
 }
 
-class LabelLine {
+class LabelLine implements ILine {
     public readonly label: Label;
 
     constructor(label) {
@@ -185,7 +189,7 @@ class LabelLine {
     }
 }
 
-class OpcodeLine {
+class OpcodeLine implements ILine {
     public readonly opcode: string;
     public readonly operands: Array<any>;
 
@@ -199,16 +203,14 @@ class OpcodeLine {
     }
 }
 
-export class Operand {
+export abstract class Operand {
     protected readonly expression: any;
 
     constructor(expression) {
         this.expression = expression;
     }
 
-    format() {
-        throw new Error(`format() not implemented for ${this.constructor.name}`);
-    }
+    abstract format();
 }
 
 export class Label extends Operand {

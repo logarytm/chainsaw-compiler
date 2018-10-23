@@ -1,4 +1,4 @@
-/* derp */
+/* Comment. */
 
 fn unmap_page(addr pword, n word) pword;
 fn ptes(addr pword) pword;

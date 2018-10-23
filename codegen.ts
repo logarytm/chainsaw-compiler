@@ -1,7 +1,7 @@
 import * as R from 'ramda';
-import { CompileError, generateUniqueId, nodesEqual, showCompileError, showLocation } from './utils';
+import { CompileError, nodesEqual, showCompileError, showLocation } from './utils';
 import { createCallingConvention, getReservationSize } from './abi';
-import { Immediate, Label, Relative } from './assembly';
+import { AssemblyWriter, Immediate, Relative } from './assembly';
 import { RegisterAllocator, registers } from './register';
 import { Scope } from './scope';
 
@@ -17,12 +17,28 @@ const FUNCTION_NATURE = Symbol('function');
 const VARIABLE_NATURE = Symbol('variable');
 const PARAMETER_NATURE = Symbol('parameter');
 
-export function generateCode(topLevelStatements, writer, options) {
+export function generateCode(topLevelStatements, writer: AssemblyWriter, options) {
     const result = { success: true };
     const stack = [];
     const rootScope = new Scope();
 
     let stringCounter = 0;
+
+    function generateTopLevelStatement(statement, state) {
+        switch (statement.kind) {
+        case 'FunctionDefinition':
+        case 'FunctionDeclaration':
+            generateFunctionDeclinition(statement, state);
+            break;
+
+        case 'VariableDeclaration':
+            generateVariableDeclaration(statement, state);
+            break;
+
+        default:
+            fatal(`Unexpected top-level node kind: ${statement.kind}.`);
+        }
+    }
 
     function generateFunctionDeclinition(declinition, state) {
         checkNodeKind(declinition, ['FunctionDefinition', 'FunctionDeclaration']);
@@ -412,7 +428,7 @@ export function generateCode(topLevelStatements, writer, options) {
         assemblyWriter: writer,
     });
 
-    topLevelStatements.forEach(descend(generateFunctionDeclinition, globalState));
+    topLevelStatements.forEach(descend(generateTopLevelStatement, globalState));
 
     tracing.restoreTraceHandler();
 

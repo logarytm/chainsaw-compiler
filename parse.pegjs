@@ -190,6 +190,8 @@ TopLevelStatement
     { return declaration; }
     / definition: FunctionDefinition
     { return definition; }
+    / declaration: VariableDeclaration
+    { return declaration; }
 
 FunctionDeclaration
     =
@@ -257,6 +259,12 @@ FunctionBody
     { return tree.FunctionBody({ statements: statements.map(nth(0)).filter(notEmpty) }); }
 
 FunctionStatement
+    = declaration: VariableDeclaration
+    { return declaration; }
+    / statement: Statement
+    { return statement; }
+
+VariableDeclaration
     =
         "var" __
         variableName: Identifier __
@@ -270,8 +278,6 @@ FunctionStatement
             initialValue: get(initialValue, 2, null),
         });
     }
-    / statement: Statement
-    { return statement; }
 
 Statement
     = Comment
