@@ -54,7 +54,7 @@ class StdcallConvention implements ICallingConvention {
 }
 
 class FastcallConvention implements ICallingConvention {
-    private registers: Register[];
+    private readonly registers: Register[];
 
     constructor() {
         this.registers = [new Register('ax'), new Register('bx'), new Register('cx'), new Register('dx')];

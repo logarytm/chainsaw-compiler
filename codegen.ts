@@ -24,7 +24,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
 
     let stringCounter = 0;
 
-    function generateTopLevelStatement(statement, state) {
+    function generateTopLevelStatement(statement, state: CodegenState) {
         switch (statement.kind) {
         case 'FunctionDefinition':
         case 'FunctionDeclaration':
@@ -40,7 +40,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         }
     }
 
-    function generateFunctionDeclinition(declinition, state) {
+    function generateFunctionDeclinition(declinition, state: CodegenState) {
         checkNodeKind(declinition, ['FunctionDefinition', 'FunctionDeclaration']);
 
         const isDefinition = declinition.kind === 'FunctionDefinition';
@@ -210,7 +210,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         writer.opcode('ret');
     }
 
-    function computeExpression(destinationRegister, expression, state) {
+    function computeExpression(destinationRegister, expression, state: CodegenState) {
         match(expression, {
             FunctionApplication(application) {
                 check(application.function.kind === 'Identifier', `Calling expressions as functions is not implemented.`);
@@ -403,7 +403,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             },
 
             String({ string }) {
-                const encoded = [...string].map(c => c.charCodeAt());
+                const encoded = [...string].map(c => c.charCodeAt(0));
                 const id = 'S' + stringCounter++;
                 const label = writer.reserve(id, string.length, [string.length, ...encoded]);
 
@@ -450,7 +450,13 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         },
     };
 
-    const globalState = statePrototype.extend({
+    type CodegenState = typeof statePrototype & {
+        scope: Scope,
+        prefix: string,
+        assemblyWriter: AssemblyWriter,
+    };
+
+    const globalState: CodegenState = statePrototype.extend({
         scope: rootScope,
         prefix: '',
         assemblyWriter: writer,
@@ -476,7 +482,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
 
     //region Error reporting
     function error(message) {
-        console.error(showCompileError(globalState.createError(message)));
+        showCompileError(globalState.createError(message));
         result.success = false;
     }
 

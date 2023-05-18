@@ -1,5 +1,6 @@
 export class Scope {
-    private parent: any;
+    private readonly parent: any;
+    // noinspection TypeScriptFieldCanBeMadeReadonly
     private bindings: any;
 
     constructor(parent = null) {

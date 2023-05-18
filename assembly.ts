@@ -166,7 +166,7 @@ class RawLine implements ILine {
 }
 
 class CommentLine implements ILine {
-    private text: string;
+    private readonly text: string;
 
     constructor(text) {
         this.text = text;
@@ -191,7 +191,7 @@ class LabelLine implements ILine {
 
 class OpcodeLine implements ILine {
     public readonly opcode: string;
-    public readonly operands: Array<any>;
+    public readonly operands: Operand[];
 
     constructor(opcode, operands) {
         this.opcode = opcode.toUpperCase();
@@ -210,7 +210,11 @@ export abstract class Operand {
         this.expression = expression;
     }
 
-    abstract format();
+    abstract format(): string;
+
+    isEqualTo(other: Operand): boolean {
+        return other instanceof this.constructor && other.expression === this.expression;
+    }
 }
 
 export class Label extends Operand {
@@ -228,41 +232,37 @@ export class Label extends Operand {
 }
 
 export class Register extends Operand {
-    format() {
+    public format(): string {
         return this.name;
     }
 
-    get name() {
+    public get name(): string {
         return this.expression.toUpperCase();
-    }
-
-    isEqualTo(r) {
-        return this.expression === r.expression;
     }
 }
 
 export class Immediate extends Operand {
-    format() {
+    public format(): string {
         return `(${this.expression})`;
     }
 }
 
 export class Absolute extends Operand {
-    format() {
+    public format(): string {
         return `<${this.expression.format()}>`;
     }
 
-    get target(): any {
+    public get target(): any {
         return this.expression;
     }
 }
 
 export class Relative extends Operand {
-    format() {
+    public format(): string {
         return `[${this.expression.format()}]`;
     }
 
-    get target(): any {
+    public get target(): any {
         return this.expression;
     }
 }

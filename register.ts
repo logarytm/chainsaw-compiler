@@ -12,9 +12,9 @@ export const registers = {
 export class RegisterAllocator {
     private assemblyWriter: AssemblyWriter;
     private nextUnallocated: number;
-    private firstInaccessible: number;
-    private maxUsed: number;
-    private all: Register[];
+    private readonly firstInaccessible: number;
+    private readonly maxUsed: number;
+    private readonly all: Register[];
 
     constructor(assemblyWriter) {
         this.assemblyWriter = assemblyWriter;
