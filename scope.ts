@@ -20,7 +20,7 @@ export class Scope {
         return error(name);
     }
 
-    bind(name, binding, alreadyBound) {
+    bind(name, binding, alreadyBound): void {
         if (this.bindings.hasOwnProperty(name)) {
             alreadyBound(this.bindings[name]);
         }

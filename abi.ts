@@ -1,5 +1,6 @@
 import { Register, Relative } from './assembly';
 import './utils';
+import { CodegenState } from './contracts';
 
 export function getReservationSize(type) {
     switch (type.kind) {
@@ -18,21 +19,21 @@ export function getReservationSize(type) {
 interface ICallingConvention {
     validateDeclaration(binding, state);
 
-    emitCall(binding, args, state);
+    emitCall(binding, args, state, computeExpressionIntoRegister: (register: Register, argument: any, state: CodegenState) => void): void;
 
-    emitPrologue(binding, args, state);
+    emitPrologue(binding, args, state: CodegenState): void;
 
-    emitEpilogue(binding, args, state);
+    emitEpilogue(binding, args, state: CodegenState): void;
 }
 
 class StdcallConvention implements ICallingConvention {
     validateDeclaration(binding, state) {
     }
 
-    emitCall(binding, args, state) {
+    emitCall(binding, args, state, computeExpressionIntoRegister): void {
         for (let argument of args) {
             state.callWithFreeRegister(register => {
-                state.computeExpressionIntoRegister(register, argument, state);
+                computeExpressionIntoRegister(register, argument, state);
                 state.assemblyWriter.opcode('push', register);
             });
         }
@@ -66,13 +67,13 @@ class FastcallConvention implements ICallingConvention {
         }
     }
 
-    emitCall(binding, args, state) {
+    emitCall(binding, args, state, computeExpressionIntoRegister): void {
         trace('fastcall', 'save');
         this.registers.forEach(r => state.assemblyWriter.opcode('push', r));
         trace('fastcall', 'saved');
 
         for (let i = 0; i < args.length; i++) {
-            state.computeExpressionIntoRegister(this.registers[i], args[i], state);
+            computeExpressionIntoRegister(this.registers[i], args[i], state);
         }
 
         state.assemblyWriter.opcode('call', new Relative(binding.label));

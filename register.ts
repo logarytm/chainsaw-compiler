@@ -42,7 +42,7 @@ export class RegisterAllocator {
      * if the register is already allocated (i.e. used for other computations).  This is useful for instructions such
      * as CCF (copy carry flag), which always write to a particular register.
      */
-    borrowRegister(register, fn) {
+    borrowRegister<T>(register: Register, fn: () => T) {
         trace('register-borrowing', 'ignore', register.name);
 
         // If the register is not used for anything else, do not save the value.
@@ -68,7 +68,7 @@ export class RegisterAllocator {
         return this.nextUnallocated > index;
     }
 
-    callWithFreeRegister(fn) {
+    callWithFreeRegister<T>(fn: (register: Register) => T) {
         if (this.nextUnallocated < this.firstInaccessible) {
             const register = this.all[this.nextUnallocated];
 

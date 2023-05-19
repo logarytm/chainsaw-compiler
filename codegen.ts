@@ -1,9 +1,11 @@
 import * as R from 'ramda';
 import { CompileError, nodesEqual, showCompileError, showLocation } from './utils';
 import { createCallingConvention, getReservationSize } from './abi';
-import { AssemblyWriter, Immediate, Relative } from './assembly';
+import { AssemblyWriter, Immediate, Register, Relative } from './assembly';
 import { RegisterAllocator, registers } from './register';
 import { Scope } from './scope';
+import { CodegenState } from './contracts';
+import { AnyNode } from './grammar';
 
 declare global {
     const tracing: any;
@@ -122,7 +124,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         writer.opcode('ret');
     }
 
-    function generateVariableDeclaration(declaration, state) {
+    function generateVariableDeclaration(declaration, state: CodegenState): void {
         const variableName = declaration.variableName;
         const label = writer.reserve(state.prefix + 'V' + variableName, getReservationSize(declaration.variableType));
 
@@ -130,6 +132,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             label,
             type: declaration.variableType,
             nature: VARIABLE_NATURE,
+        }, function (binding) {
+            error(`Name ${variableName} is already bound.`);
         });
 
         if (declaration.initialValue !== null) {
@@ -142,7 +146,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         }
     }
 
-    function generateStatement(statement, state) {
+    function generateStatement(statement, state: CodegenState) {
         match(statement, {
             VariableDeclaration: descend(generateVariableDeclaration, state),
             ConditionalStatement: descend(generateConditionalStatement, state),
@@ -225,9 +229,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
                     `Wrong number of arguments to ${functionName} (expected ${binding.arity}, got ${application.args.length}).`,
                 );
 
-                binding.callingConvention.emitCall(binding, application.args, state.extend({
-                    computeExpressionIntoRegister: computeExpression,
-                }));
+                // XXX: Not sure if the extend is necessary
+                binding.callingConvention.emitCall(binding, application.args, state.extend({}), computeExpression);
             },
 
             ArrayDereference(dereference) {
@@ -415,23 +418,23 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
     // Write traces as comments in assembly output.
     tracing.setTraceHandler(traceHandler);
 
-    const statePrototype = {
-        extend(obj) {
+    const statePrototype: Partial<CodegenState> = {
+        extend(obj: Partial<CodegenState>): CodegenState {
             return Object.assign({}, this, obj);
         },
 
-        createError(message) {
+        createError(message: string): CompileError {
             return new CompileError(message, top().location, options.filename);
         },
 
         registerAllocator: new RegisterAllocator(writer),
 
-        callWithFreeRegister(fn) {
+        callWithFreeRegister<T>(fn: (register: Register) => T): T {
             return this.registerAllocator.callWithFreeRegister(fn);
         },
 
         // Allocates a number of registers to be used at the same time.
-        callWithFreeRegisters(count, fn, registers = []) {
+        callWithFreeRegisters<T>(count: number, fn: (...registers: Register[]) => T, registers: Register[] = []): T {
             if (count > this.registerAllocator.maxUsed) {
                 throw new Error(`Cannot use more than ${this.registerAllocator.maxUsed} registers at the same time.`);
             }
@@ -445,15 +448,9 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             return fn(...registers);
         },
 
-        borrowRegister(register, fn) {
+        borrowRegister<T>(register: Register, fn: () => T) {
             return this.registerAllocator.borrowRegister(register, fn);
         },
-    };
-
-    type CodegenState = typeof statePrototype & {
-        scope: Scope,
-        prefix: string,
-        assemblyWriter: AssemblyWriter,
     };
 
     const globalState: CodegenState = statePrototype.extend({
@@ -481,7 +478,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
     //endregion
 
     //region Error reporting
-    function error(message) {
+    function error(message: string): void {
         showCompileError(globalState.createError(message));
         result.success = false;
     }
@@ -489,17 +486,17 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
     /**
      * Reports an unrecoverable error.
      */
-    function fatal(message) {
+    function fatal(message: string): void {
         throw globalState.createError(message);
     }
 
-    function check(condition, message) {
+    function check(condition: boolean, message: string): void {
         if (!condition) {
             fatal(message);
         }
     }
 
-    function checkNodeKind(node, kinds, message = `Expected ${kinds.join(' or ')}, got ${node.kind}.`) {
+    function checkNodeKind(node, kinds, message: string = `Expected ${kinds.join(' or ')}, got ${node.kind}.`) {
         check(kinds.includes(node.kind), message);
     }
 
@@ -514,7 +511,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         return descend(fn, state)(node);
     }
 
-    function descend(fn, state) {
+    function descend<T>(fn: (node, state: CodegenState) => T, state: CodegenState): (node: AnyNode) => T {
         return node => {
             trace('traverse', 'enter', node.kind, showLocation(node.location));
             stack.push(node);
@@ -528,7 +525,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         };
     }
 
-    function match(node, mappings) {
+    function match(node: AnyNode, mappings): void {
         if (!mappings.hasOwnProperty(node.kind)) {
             throw new Error(`match(): Unhandled node kind: ${node.kind}.`);
         }
