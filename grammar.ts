@@ -46,7 +46,8 @@ export type NodeOfKind<TKind extends NodeKind> = {
 type Node<TKind extends string, TExtra = {}> = {
     kind: TKind;
     location: Location;
-    isEqualTo?: (other: AnyNode) => boolean | null;
+    // XXX: `other` should be `AnyNode`
+    isEqualTo?: (other: object) => boolean | null;
 } & TExtra;
 
 export type AnyNode = Node<NodeKind>;
@@ -139,7 +140,14 @@ export type NamedType = Node<'NamedType', {
     name: string;
 }>;
 
-export type Expression = PrimaryExpression | BinaryOperator;
+export type Expression =
+    ArrayDereference
+    | FunctionApplication
+    | UnaryOperator
+    | Identifier
+    | NumberLiteral
+    | StringLiteral
+    | BinaryOperator;
 
 export type BinaryOperator = Node<'BinaryOperator', {
     lhs: Expression;
@@ -147,13 +155,9 @@ export type BinaryOperator = Node<'BinaryOperator', {
     rhs: Expression;
 }>;
 
-export type PrimaryExpression = ArrayDereference | FunctionApplication | SecondaryExpression;
-
-export type SecondaryExpression = Expression | UnaryOperator | Identifier | NumberLiteral | StringLiteral;
-
 export type UnaryOperator = Node<'UnaryOperator', {
     operator: UnaryToken;
-    operand: PrimaryExpression;
+    operand: Expression;
 }>;
 
 export type FunctionApplication = Node<'FunctionApplication', {
@@ -163,7 +167,7 @@ export type FunctionApplication = Node<'FunctionApplication', {
 
 export type ArrayDereference = Node<'ArrayDereference', {
     array: Expression;
-    offset: PrimaryExpression;
+    offset: Expression;
 }>;
 
 export type ArgumentList = Expression[];

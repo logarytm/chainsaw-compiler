@@ -1,7 +1,7 @@
-const { parseFile } = require('./parse.ts');
+const { parseFile } = require('./parse');
 import { isCompileError, showCompileError, traceParseTree } from './utils';
-const { generateCode } = require('./codegen.ts');
-const { AssemblyWriter } = require('./assembly.ts');
+const { generateCode } = require('./codegen');
+const { AssemblyWriter } = require('./assembly');
 
 const cli = require('meow')(`
     Usage

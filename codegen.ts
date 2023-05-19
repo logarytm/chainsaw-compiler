@@ -168,7 +168,7 @@ export function generateCode(topLevelStatements: Program, writer: AssemblyWriter
             check(declaration.variableType.kind !== 'ArrayType', 'Cannot initialize arrays at definition time.');
 
             state.callWithFreeRegister(register => {
-                computeExpression(register, declaration.initialValue, state);
+                computeExpression(register, declaration.initialValue as Expression, state);
                 writer.opcode('mov', new Relative(label), register);
             });
         }
@@ -263,9 +263,6 @@ export function generateCode(topLevelStatements: Program, writer: AssemblyWriter
     }
 
     function computeExpression(destinationRegister: Register, expression: Expression, state: CodegenState): void {
-        let x: { foo: number } = expression;
-        let y: Expression = { foo: 42 };
-
         switch (expression.kind) {
         case 'FunctionApplication': {
             assumeNodeKind(expression, 'FunctionApplication');

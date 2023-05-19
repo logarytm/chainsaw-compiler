@@ -94,7 +94,7 @@ export function traceParseTree(nodes: AnyNode | AnyNode[], level: number = 0, {
         indent += '  ';
 
         Object.keys(node).filter(isInterestingProperty).forEach(key => {
-            const property: unknown = node[key];
+            const property: unknown = (node as any)[key];
 
             process.stdout.write(indent);
 

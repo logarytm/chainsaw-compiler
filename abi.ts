@@ -1,7 +1,7 @@
 import { Register, Relative } from './assembly';
 import './utils';
 import { Binding, CodegenState, FunctionBinding, ParameterBinding } from './contracts';
-import { Expression, FunctionDeclaration, ParameterList, Type } from './grammar';
+import { Expression, Type } from './grammar';
 
 export function getReservationSize(type: Type): number {
     switch (type.kind) {
