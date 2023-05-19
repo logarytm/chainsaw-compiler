@@ -9,11 +9,11 @@ export class AssemblyWriter {
         this.labelno = 0;
     }
 
-    comment(text) {
+    comment(text: string) {
         this.output.push(new CommentLine(text));
     }
 
-    createLabel(name = null) {
+    createLabel(name: string | null = null): Label {
         if (name === null) {
             name = `L${this.labelno}$`;
             this.labelno++;
@@ -22,7 +22,7 @@ export class AssemblyWriter {
         return new Label(name);
     }
 
-    label(label: Label) {
+    label(label: Label): void {
         this.output.push(new LabelLine(label));
     }
 
@@ -33,11 +33,11 @@ export class AssemblyWriter {
         return label;
     }
 
-    opcode(opcode, ...operands) {
+    opcode(opcode: string, ...operands: Operand[]) {
         this.output.push(new OpcodeLine(opcode, operands));
     }
 
-    raw(instructions) {
+    raw(instructions: string) {
         this.output.push(new RawLine(instructions));
     }
 
@@ -64,7 +64,7 @@ export class AssemblyWriter {
         });
     }
 
-    reserve(name, size = 1, data = []): Label {
+    reserve(name: string, size: number = 1, data: number[] = []): Label {
         size = Math.max(data.length, size, 1);
         while (data.length < size) {
             data.push(0);
@@ -152,7 +152,7 @@ interface ILine {
 class RawLine implements ILine {
     private text: string;
 
-    constructor(text) {
+    constructor(text: string) {
         this.text = text;
     }
 
@@ -168,11 +168,11 @@ class RawLine implements ILine {
 class CommentLine implements ILine {
     private readonly text: string;
 
-    constructor(text) {
+    constructor(text: string) {
         this.text = text;
     }
 
-    format() {
+    format(): string {
         return `    ' ${this.text}`;
     }
 }
@@ -180,7 +180,7 @@ class CommentLine implements ILine {
 class LabelLine implements ILine {
     public readonly label: Label;
 
-    constructor(label) {
+    constructor(label: Label) {
         this.label = label;
     }
 
@@ -193,7 +193,7 @@ class OpcodeLine implements ILine {
     public readonly opcode: string;
     public readonly operands: Operand[];
 
-    constructor(opcode, operands) {
+    constructor(opcode: string, operands: Operand[]) {
         this.opcode = opcode.toUpperCase();
         this.operands = operands;
     }
@@ -206,7 +206,7 @@ class OpcodeLine implements ILine {
 export abstract class Operand {
     protected readonly expression: any;
 
-    constructor(expression) {
+    constructor(expression: any) {
         this.expression = expression;
     }
 
@@ -218,15 +218,15 @@ export abstract class Operand {
 }
 
 export class Label extends Operand {
-    get name() {
+    get name(): string {
         return this.expression;
     }
 
-    format() {
+    public format(): string {
         return `.${this.expression}`;
     }
 
-    isInternal() {
+    public isInternal(): boolean {
         return this.name.endsWith('$');
     }
 }

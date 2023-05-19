@@ -1,8 +1,9 @@
 import { Register, Relative } from './assembly';
 import './utils';
-import { CodegenState } from './contracts';
+import { Binding, CodegenState, FunctionBinding, ParameterBinding } from './contracts';
+import { Expression, FunctionDeclaration, ParameterList, Type } from './grammar';
 
-export function getReservationSize(type) {
+export function getReservationSize(type: Type): number {
     switch (type.kind) {
     case 'NamedType':
     case 'PointerType':
@@ -10,27 +11,36 @@ export function getReservationSize(type) {
 
     case 'ArrayType':
         return type.capacity.value * getReservationSize(type.type);
-
-    default:
-        throw new Error(`Unknown type kind: ${type.kind}.`);
     }
 }
 
+export type ParameterBindings = { [name: string]: ParameterBinding };
+
 export interface ICallingConvention {
-    validateDeclaration(binding, state);
+    assertDeclarationIsValid(binding: FunctionBinding, state: CodegenState): void;
 
-    emitCall(binding, args, state, computeExpressionIntoRegister: (register: Register, argument: any, state: CodegenState) => void): void;
+    emitCall(
+        binding: FunctionBinding,
+        args: Expression[],
+        state: CodegenState,
+        computeExpressionIntoRegister: (register: Register, argument: any, state: CodegenState) => void,
+    ): void;
 
-    emitPrologue(binding, args, state: CodegenState): void;
+    emitPrologue(binding: FunctionBinding, parameterBindings: ParameterBindings, state: CodegenState): void;
 
-    emitEpilogue(binding, args, state: CodegenState): void;
+    emitEpilogue(binding: FunctionBinding, parameterBindings: ParameterBindings, state: CodegenState): void;
 }
 
 class StdcallConvention implements ICallingConvention {
-    validateDeclaration(binding, state) {
+    public assertDeclarationIsValid(binding: Binding, state: CodegenState): void {
     }
 
-    emitCall(binding, args, state, computeExpressionIntoRegister): void {
+    public emitCall(
+        binding: FunctionBinding,
+        args: Expression[],
+        state: CodegenState,
+        computeExpressionIntoRegister: (register: Register, argument: any, state: CodegenState) => void,
+    ): void {
         for (let argument of args) {
             state.callWithFreeRegister(register => {
                 computeExpressionIntoRegister(register, argument, state);
@@ -47,27 +57,32 @@ class StdcallConvention implements ICallingConvention {
         trace('stdcall', 'caller-cleanup', 'end');
     }
 
-    emitPrologue(binding, parameterBindings, state) {
+    public emitPrologue(binding: FunctionBinding, parameterBindings: ParameterBindings, state: CodegenState): void {
     }
 
-    emitEpilogue(binding, parameterBindings, state) {
+    public emitEpilogue(binding: FunctionBinding, parameterBindings: ParameterBindings, state: CodegenState): void {
     }
 }
 
 class FastcallConvention implements ICallingConvention {
     private readonly registers: Register[];
 
-    constructor() {
+    public constructor() {
         this.registers = [new Register('ax'), new Register('bx'), new Register('cx'), new Register('dx')];
     }
 
-    validateDeclaration(declaration, state) {
+    public assertDeclarationIsValid(declaration: FunctionBinding, state: CodegenState): void {
         if (declaration.parameters.length > this.registers.length) {
             throw state.createError(`Fastcall convention supports at most ${this.registers.length} parameters.`);
         }
     }
 
-    emitCall(binding, args, state, computeExpressionIntoRegister): void {
+    public emitCall(
+        binding: FunctionBinding,
+        args: Expression[],
+        state: CodegenState,
+        computeExpressionIntoRegister: (register: Register, argument: any, state: CodegenState) => void,
+    ): void {
         trace('fastcall', 'save');
         this.registers.forEach(r => state.assemblyWriter.opcode('push', r));
         trace('fastcall', 'saved');
@@ -83,7 +98,7 @@ class FastcallConvention implements ICallingConvention {
         trace('fastcall', 'end');
     }
 
-    emitPrologue(binding, parameterBindings, state) {
+    public emitPrologue(binding: FunctionBinding, parameterBindings: ParameterBindings, state: CodegenState): void {
         if (binding.parameters.length) {
             binding.parameters.forEach((parameter, i) => {
                 state.assemblyWriter.opcode('mov', parameterBindings[parameter.name].label, this.registers[i]);
@@ -91,7 +106,7 @@ class FastcallConvention implements ICallingConvention {
         }
     }
 
-    emitEpilogue(binding, parameterBindings, state) {
+    public emitEpilogue(binding: FunctionBinding, parameterBindings: ParameterBindings, state: CodegenState): void {
     }
 }
 

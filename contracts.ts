@@ -2,7 +2,7 @@ import { Scope } from './scope';
 import { AssemblyWriter, Label, Register } from './assembly';
 import { CompileError } from './utils';
 import { RegisterAllocator } from './register';
-import { AnyNode } from './grammar';
+import { AnyNode, ParameterList } from './grammar';
 import { ICallingConvention } from './abi';
 
 export type CodegenState = {
@@ -13,7 +13,7 @@ export type CodegenState = {
     createError(message: string): CompileError;
     registerAllocator: RegisterAllocator;
     callWithFreeRegister<T>(fn: (register: Register) => T): T;
-    callWithFreeRegisters<T>(count, fn: (...registers: Register[]) => T, registers?: Register[]): T;
+    callWithFreeRegisters<T>(count: number, fn: (...registers: Register[]) => T, registers?: Register[]): T;
     borrowRegister<T>(register: Register, fn: () => T): T;
 };
 
@@ -32,7 +32,7 @@ export type FunctionBinding = {
     functionName: string;
     isDefinition: boolean;
     arity: number;
-    parameters;
+    parameters: ParameterList;
     returnType: AnyNode;
     hasReturnValue: boolean;
     callingConvention: ICallingConvention;

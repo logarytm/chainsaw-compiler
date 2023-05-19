@@ -1,24 +1,55 @@
 import * as R from 'ramda';
-import { CompileError, nodesEqual, showCompileError, showLocation } from './utils';
-import { createCallingConvention, getReservationSize } from './abi';
-import { AssemblyWriter, Immediate, Register, Relative } from './assembly';
+import { bug, CompileError, nodesEqual, showCompileError, showLocation } from './utils';
+import { createCallingConvention, getReservationSize, ParameterBindings } from './abi';
+import { AssemblyWriter, Immediate, Operand, Register, Relative } from './assembly';
 import { RegisterAllocator, registers } from './register';
 import { Scope } from './scope';
-import { Binding, CodegenState, FUNCTION_NATURE, PARAMETER_NATURE, VARIABLE_NATURE } from './contracts';
-import { AnyNode } from './grammar';
+import {
+    Binding,
+    CodegenState,
+    FUNCTION_NATURE,
+    FunctionBinding,
+    PARAMETER_NATURE, ParameterBinding,
+    VARIABLE_NATURE,
+} from './contracts';
+import {
+    AnyNode,
+    ArrayDereference,
+    BinaryOperator,
+    Body,
+    ConditionalStatement,
+    Expression,
+    ExpressionStatement,
+    FunctionApplication,
+    FunctionDeclaration,
+    FunctionDefinition, FunctionStatement, Identifier,
+    InlineAssembler,
+    LoopingStatement, NumberLiteral,
+    Program,
+    ReturnStatement,
+    Statement, StringLiteral,
+    TopLevelStatement, Type,
+    UnaryOperator,
+    VariableDeclaration,
+    NodeKind, NodeOfKind,
+} from './grammar';
 
 declare global {
     const tracing: any;
 }
 
-export function generateCode(topLevelStatements, writer: AssemblyWriter, options) {
-    const result = { success: true };
-    const stack = [];
-    const rootScope = new Scope();
+type CodegenResult = {
+    success: boolean;
+};
 
-    let stringCounter = 0;
+export function generateCode(topLevelStatements: Program, writer: AssemblyWriter, options: any): CodegenResult {
+    const result: CodegenResult = { success: true };
+    const stack: AnyNode[] = [];
+    const rootScope: Scope = new Scope();
 
-    function generateTopLevelStatement(statement, state: CodegenState) {
+    let stringCounter: number = 0;
+
+    function generateTopLevelStatement(statement: TopLevelStatement, state: CodegenState) {
         switch (statement.kind) {
         case 'FunctionDefinition':
         case 'FunctionDeclaration':
@@ -30,12 +61,12 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             break;
 
         default:
-            fatal(`Unexpected top-level node kind: ${statement.kind}.`);
+            fatal(`Unexpected top-level node kind.`);
         }
     }
 
-    function generateFunctionDeclinition(declinition, state: CodegenState) {
-        checkNodeKind(declinition, ['FunctionDefinition', 'FunctionDeclaration']);
+    function generateFunctionDeclinition(declinition: FunctionDeclaration | FunctionDefinition, state: CodegenState) {
+        checkNodeKinds(declinition, ['FunctionDefinition', 'FunctionDeclaration']);
 
         const isDefinition = declinition.kind === 'FunctionDefinition';
         const functionName = declinition.functionName;
@@ -49,7 +80,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
          *   - Type information, which lets us emit proper calls and check type correctness later on, including
          *   - The binding nature, which informs what the name symbolises (function, variable, named type...)
          */
-        const binding: Binding = {
+        const binding: FunctionBinding = {
             label,
             functionName,
             isDefinition,
@@ -61,7 +92,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             nature: FUNCTION_NATURE,
         };
 
-        binding.callingConvention.validateDeclaration(binding, state);
+        binding.callingConvention.assertDeclarationIsValid(binding, state);
 
         state.scope.bind(functionName, binding, function alreadyBound(previousBinding) {
 
@@ -87,7 +118,9 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             return;
         }
 
-        const parameterBindings = {};
+        check(declinition.kind === 'FunctionDefinition', ``);
+
+        const parameterBindings: ParameterBindings = {};
         for (const parameter of declinition.parameters) {
             check(parameter.type.kind !== 'ArrayType',
                 'Cannot pass arrays as arguments. Use a pointer instead.');
@@ -118,8 +151,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         writer.opcode('ret');
     }
 
-    function generateVariableDeclaration(declaration, state: CodegenState): void {
-        const variableName = declaration.variableName;
+    function generateVariableDeclaration(declaration: VariableDeclaration, state: CodegenState): void {
+        const variableName = String(declaration.variableName);
         const label = writer.reserve(state.prefix + 'V' + variableName, getReservationSize(declaration.variableType));
 
         state.scope.bind(variableName, {
@@ -141,22 +174,42 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         }
     }
 
-    function generateStatement(statement, state: CodegenState) {
-        match(statement, {
-            VariableDeclaration: descend(generateVariableDeclaration, state),
-            ConditionalStatement: descend(generateConditionalStatement, state),
-            LoopingStatement: descend(generateLoopingStatement, state),
-            ReturnStatement: descend(generateReturnStatement, state),
-            ExpressionStatement: descend(generateExpressionStatement, state),
-            InlineAssembler: descend(generateInlineAssembler, state),
-        });
+    function generateStatement(statement: FunctionStatement, state: CodegenState): void {
+        switch (statement.kind) {
+        case 'VariableDeclaration':
+            into(generateVariableDeclaration, statement, state);
+            break;
+
+        case 'ConditionalStatement':
+            into(generateConditionalStatement, statement, state);
+            break;
+
+        case 'LoopingStatement':
+            into(generateLoopingStatement, statement, state);
+            break;
+
+        case 'ReturnStatement':
+            into(generateReturnStatement, statement, state);
+            break;
+
+        case 'ExpressionStatement':
+            into(generateExpressionStatement, statement, state);
+            break;
+
+        case 'InlineAssembler':
+            into(generateInlineAssembler, statement, state);
+            break;
+
+        default:
+            bug(`Invalid node type: ${statement}.`);
+        }
     }
 
-    function generateInlineAssembler(assembler, state) {
+    function generateInlineAssembler(assembler: InlineAssembler, state: CodegenState): void {
         writer.raw(assembler.instructions);
     }
 
-    function generateExpressionStatement(statement, state) {
+    function generateExpressionStatement(statement: ExpressionStatement, state: CodegenState): void {
         const expression = statement.expression;
         state.callWithFreeRegister(register => {
 
@@ -165,7 +218,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         });
     }
 
-    function generateConditionalStatement(statement, state) {
+    function generateConditionalStatement(statement: ConditionalStatement, state: CodegenState): void {
         const elseLabel = writer.createLabel();
         const afterLabel = writer.createLabel();
 
@@ -184,7 +237,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         });
     }
 
-    function generateLoopingStatement(statement, state) {
+    function generateLoopingStatement(statement: LoopingStatement, state: CodegenState) {
         const start = writer.createAndEmitLabel();
         const exit = writer.createLabel();
 
@@ -200,238 +253,274 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         });
     }
 
-    function generateBody(body, state) {
+    function generateBody(body: Body, state: CodegenState): void {
         body.statements.forEach(statement => generateStatement(statement, state));
     }
 
-    function generateReturnStatement(rs, state) {
+    function generateReturnStatement(rs: ReturnStatement, state: CodegenState): void {
         computeExpression(registers.ax, rs.expression, state);
         writer.opcode('ret');
     }
 
-    function computeExpression(destinationRegister, expression, state: CodegenState) {
-        match(expression, {
-            FunctionApplication(application) {
-                check(application.function.kind === 'Identifier', `Calling expressions as functions is not implemented.`);
+    function computeExpression(destinationRegister: Register, expression: Expression, state: CodegenState): void {
+        let x: { foo: number } = expression;
+        let y: Expression = { foo: 42 };
 
-                const functionName = application.function.name;
-                const binding = state.scope.lookup(functionName, (name: string): never => {
-                    return fatal(`${functionName} is not defined.`);
+        switch (expression.kind) {
+        case 'FunctionApplication': {
+            assumeNodeKind(expression, 'FunctionApplication');
+
+            check(expression.function.kind === 'Identifier', `Calling expressions as functions is not implemented.`);
+
+            const functionName = expression.function.name;
+            const binding = state.scope.lookup(functionName, (name: string): never => {
+                return fatal(`${functionName} is not defined.`);
+            });
+
+            check(binding.nature === FUNCTION_NATURE, `${functionName} is not a function.`);
+
+            check(
+                expression.args.length === binding.arity,
+                `Wrong number of arguments to ${functionName} (expected ${binding.arity}, got ${expression.args.length}).`,
+            );
+
+            // XXX: Not sure if the extend is necessary
+            binding.callingConvention.emitCall(binding, expression.args, state.extend({}), computeExpression);
+        }
+            break;
+
+        case 'ArrayDereference': {
+            assumeNodeKind(expression, 'ArrayDereference');
+
+            state.callWithFreeRegisters(2, (arrayRegister, offsetRegister) => {
+                computeExpression(arrayRegister, expression.array, state);
+                computeExpression(offsetRegister, expression.offset, state);
+
+                writer.opcode('add', arrayRegister, offsetRegister);
+                writer.opcode('mov', destinationRegister, new Relative(arrayRegister));
+            });
+        }
+            break;
+
+        case 'UnaryOperator': {
+            assumeNodeKind(expression, 'UnaryOperator');
+
+            switch (expression.operator) {
+            case 'not':
+                state.borrowRegister(destinationRegister, () => {
+                    computeExpression(destinationRegister, expression.operand, state);
+                    writer.opcode('not', destinationRegister);
                 });
+                break;
 
-                check(binding.nature === FUNCTION_NATURE, `${functionName} is not a function.`);
+            default:
+                throw new Error(`Unary operator not implemented: ${expression.operator}.`);
+            }
+        }
+            break;
 
-                check(
-                    application.args.length === binding.arity,
-                    `Wrong number of arguments to ${functionName} (expected ${binding.arity}, got ${application.args.length}).`,
-                );
+        case 'BinaryOperator': {
+            assumeNodeKind(expression, 'BinaryOperator');
 
-                // XXX: Not sure if the extend is necessary
-                binding.callingConvention.emitCall(binding, application.args, state.extend({}), computeExpression);
-            },
+            switch (expression.operator) {
 
-            ArrayDereference(dereference) {
-                state.callWithFreeRegisters(2, (arrayRegister, offsetRegister) => {
-                    computeExpression(arrayRegister, dereference.array, state);
-                    computeExpression(offsetRegister, dereference.offset, state);
+                //region Relational operators
+            case '<':
+            case '>': {
+                const copyFlag = { '<': 'cff', '>': 'cof' }[expression.operator];
 
-                    writer.opcode('add', arrayRegister, offsetRegister);
-                    writer.opcode('mov', destinationRegister, new Relative(arrayRegister));
+                state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
+                    computeExpression(lhsRegister, expression.lhs, state);
+                    computeExpression(rhsRegister, expression.rhs, state);
+                    writer.opcode('cmp', lhsRegister, rhsRegister);
+                    state.borrowRegister(registers.dx, () => {
+                        writer.opcode(copyFlag);
+                        writer.opcode('mov', destinationRegister, registers.dx);
+                    });
                 });
-            },
+                break;
+            }
 
-            UnaryOperator(operator) {
-                switch (operator.operator) {
-                case 'not':
-                    state.borrowRegister(destinationRegister, () => {
-                        computeExpression(destinationRegister, operator.operand, state);
-                        writer.opcode('not', destinationRegister);
+            case '==':
+            case '!=': {
+                const shouldNegate = expression.operator === '!=';
+
+                state.callWithFreeRegister(rhsRegister => {
+                    computeExpression(destinationRegister, expression.lhs, state);
+                    computeExpression(rhsRegister, expression.rhs, state);
+                    writer.opcode('test', destinationRegister, rhsRegister);
+                    state.borrowRegister(registers.dx, () => {
+                        writer.opcode('czf');
+                        writer.opcode('mov', destinationRegister, registers.dx);
+                        if (shouldNegate) {
+                            writer.opcode('not', destinationRegister);
+                        }
                     });
-                    break;
-
-                default:
-                    throw new Error(`Unary operator not implemented: ${operator.operator}.`);
-                }
-            },
-
-            BinaryOperator(operator) {
-                switch (operator.operator) {
-
-                    //region Relational operators
-                case '<':
-                case '>': {
-                    const copyFlag = { '<': 'cff', '>': 'cof' }[operator.operator];
-
-                    state.callWithFreeRegisters(2, (lhsRegister, rhsRegister) => {
-                        computeExpression(lhsRegister, operator.lhs, state);
-                        computeExpression(rhsRegister, operator.rhs, state);
-                        writer.opcode('cmp', lhsRegister, rhsRegister);
-                        state.borrowRegister(registers.dx, () => {
-                            writer.opcode(copyFlag);
-                            writer.opcode('mov', destinationRegister, registers.dx);
-                        });
-                    });
-                    break;
-                }
-
-                case '==':
-                case '!=': {
-                    const shouldNegate = operator.operator === '!=';
-
-                    state.callWithFreeRegister(rhsRegister => {
-                        computeExpression(destinationRegister, operator.lhs, state);
-                        computeExpression(rhsRegister, operator.rhs, state);
-                        writer.opcode('test', destinationRegister, rhsRegister);
-                        state.borrowRegister(registers.dx, () => {
-                            writer.opcode('czf');
-                            writer.opcode('mov', destinationRegister, registers.dx);
-                            if (shouldNegate) {
-                                writer.opcode('not', destinationRegister);
-                            }
-                        });
-                    });
-                    break;
-                }
-
-                    //endregion
-
-                    //region Logical operators
-                case 'or':
-                    state.callWithFreeRegister(rhsRegister => {
-                        const exit = writer.createLabel();
-
-                        computeExpression(destinationRegister, operator.lhs, state);
-                        writer.opcode('test', destinationRegister, new Immediate(0));
-                        writer.opcode('jnz', exit);
-                        computeExpression(destinationRegister, operator.rhs, state);
-                        writer.label(exit);
-                    });
-                    break;
-
-                case 'and':
-                    state.callWithFreeRegister(rhsRegister => {
-                        const exit = writer.createLabel();
-
-                        computeExpression(destinationRegister, operator.lhs, state);
-                        writer.opcode('test', destinationRegister, new Immediate(0));
-                        writer.opcode('jz', exit);
-                        computeExpression(destinationRegister, operator.rhs, state);
-                        writer.label(exit);
-                    });
-                    break;
-
-                    //endregion
-
-                    //region Assignment operators
-                case '=': {
-                    let lhsOperand = null;
-
-                    switch (operator.lhs.kind) {
-                    case 'Identifier': {
-                        const identifier = operator.lhs;
-                        lhsOperand = new Relative(state.scope.lookup(identifier.name, (name: string): never => {
-                            return fatal(`${identifier.name} is not defined`);
-                        }).label);
-                        break;
-                    }
-
-                    default: {
-                        throw new Error(`Unimplemented l-value kind: ${operator.lhs.kind}.`);
-                    }
-                    }
-
-                    state.callWithFreeRegister(rhsRegister => {
-                        computeExpression(rhsRegister, operator.rhs, state);
-                        writer.opcode('mov', lhsOperand, rhsRegister);
-                    });
-                    break;
-                }
-                    //endregion
-
-                    //region Arithmetic and bitwise operators
-                case '+':
-                case '-':
-                case '*':
-                case '/':
-                case '&': {
-                    const opcode = {
-                        '+': 'add',
-                        '-': 'sub',
-                        '*': 'sys mul6',
-                        '/': 'sys div6',
-                        '&': 'and',
-                    }[operator.operator];
-
-                    state.callWithFreeRegister(rhsRegister => {
-                        computeExpression(destinationRegister, operator.lhs, state);
-                        computeExpression(rhsRegister, operator.rhs, state);
-                        writer.opcode(opcode, destinationRegister, rhsRegister);
-                    });
-                    break;
-                }
-                    //endregion
-
-                default:
-                    throw new Error(`Binary operator not implemented: ${operator.operator}.`);
-                }
-            },
-
-            Identifier({ name }) {
-                // Handle pre-defined identifiers.
-                switch (name) {
-                case 'true': {
-                    writer.opcode('mov', destinationRegister, new Immediate(1));
-                    return;
-                }
-
-                case 'false': {
-                    writer.opcode('mov', destinationRegister, new Immediate(0));
-                    return;
-                }
-                }
-
-                const binding = state.scope.lookup(name, () => {
-                    fatal(`${name} is not defined.`);
                 });
+                break;
+            }
 
-                check(binding.nature === VARIABLE_NATURE || binding.nature === PARAMETER_NATURE, `${name} is not an l-value.`);
-                writer.opcode('mov', destinationRegister, new Relative(binding.label));
-            },
+                //endregion
 
-            Number({ value }) {
-                writer.opcode('mov', destinationRegister, new Immediate(value));
-            },
+                //region Logical operators
+            case 'or':
+                state.callWithFreeRegister(rhsRegister => {
+                    const exit = writer.createLabel();
 
-            String({ string }) {
-                const encoded = [...string].map(c => c.charCodeAt(0));
-                const id = 'S' + stringCounter++;
-                const label = writer.reserve(id, string.length, [string.length, ...encoded]);
+                    computeExpression(destinationRegister, expression.lhs, state);
+                    writer.opcode('test', destinationRegister, new Immediate(0));
+                    writer.opcode('jnz', exit);
+                    computeExpression(destinationRegister, expression.rhs, state);
+                    writer.label(exit);
+                });
+                break;
 
-                writer.opcode('lea', destinationRegister, new Relative(label));
-            },
-        });
+            case 'and':
+                state.callWithFreeRegister(rhsRegister => {
+                    const exit = writer.createLabel();
+
+                    computeExpression(destinationRegister, expression.lhs, state);
+                    writer.opcode('test', destinationRegister, new Immediate(0));
+                    writer.opcode('jz', exit);
+                    computeExpression(destinationRegister, expression.rhs, state);
+                    writer.label(exit);
+                });
+                break;
+
+                //endregion
+
+                //region Assignment operators
+            case '=': {
+                let lhsOperand: Operand;
+
+                switch (expression.lhs.kind) {
+                case 'Identifier': {
+                    const identifier = expression.lhs;
+                    lhsOperand = new Relative(state.scope.lookup(identifier.name, (name: string): never => {
+                        return fatal(`${identifier.name} is not defined`);
+                    }).label);
+                    break;
+                }
+
+                default: {
+                    throw new Error(`Unimplemented l-value kind: ${expression.lhs.kind}.`);
+                }
+                }
+
+                state.callWithFreeRegister(rhsRegister => {
+                    computeExpression(rhsRegister, expression.rhs, state);
+                    writer.opcode('mov', lhsOperand, rhsRegister);
+                });
+                break;
+            }
+                //endregion
+
+                //region Arithmetic and bitwise operators
+            case '+':
+            case '-':
+            case '*':
+            case '/':
+            case '&': {
+                const opcode = {
+                    '+': 'add',
+                    '-': 'sub',
+                    '*': 'sys mul6',
+                    '/': 'sys div6',
+                    '&': 'and',
+                }[expression.operator];
+
+                state.callWithFreeRegister(rhsRegister => {
+                    computeExpression(destinationRegister, expression.lhs, state);
+                    computeExpression(rhsRegister, expression.rhs, state);
+                    writer.opcode(opcode, destinationRegister, rhsRegister);
+                });
+                break;
+            }
+                //endregion
+
+            default:
+                throw new Error(`Binary operator not implemented: ${expression.operator}.`);
+            }
+        }
+            break;
+
+        case 'Identifier': {
+            assumeNodeKind(expression, 'Identifier');
+
+            const name = expression.name;
+
+            // Handle pre-defined identifiers.
+            switch (name) {
+            case 'true': {
+                writer.opcode('mov', destinationRegister, new Immediate(1));
+                return;
+            }
+
+            case 'false': {
+                writer.opcode('mov', destinationRegister, new Immediate(0));
+                return;
+            }
+            }
+
+            const binding = state.scope.lookup(name, (name: string): never => {
+                return fatal(`${name} is not defined.`);
+            });
+
+            check(binding.nature === VARIABLE_NATURE || binding.nature === PARAMETER_NATURE, `${name} is not an l-value.`);
+            writer.opcode('mov', destinationRegister, new Relative(binding.label));
+        }
+            break;
+
+        case 'Number': {
+            assumeNodeKind(expression, 'Number');
+
+            writer.opcode('mov', destinationRegister, new Immediate(expression.value));
+        }
+            break;
+
+        case 'String': {
+            assumeNodeKind(expression, 'String');
+
+            const string = expression.string;
+            const encoded = [...string].map(c => c.charCodeAt(0));
+            const id = 'S' + stringCounter++;
+            const label = writer.reserve(id, string.length, [string.length, ...encoded]);
+
+            writer.opcode('lea', destinationRegister, new Relative(label));
+        }
+            break;
+
+        }
     }
 
     // Write traces as comments in assembly output.
     tracing.setTraceHandler(traceHandler);
 
-    const statePrototype: Partial<CodegenState> = {
-        extend(obj: Partial<CodegenState>): CodegenState {
+    const globalState: CodegenState = {
+        registerAllocator: new RegisterAllocator(writer),
+        scope: rootScope,
+        prefix: '',
+        assemblyWriter: writer,
+
+        extend(this: CodegenState, obj: Partial<CodegenState>): CodegenState {
             return Object.assign({}, this, obj);
         },
 
-        createError(message: string): CompileError {
+        createError(this: CodegenState, message: string): CompileError {
             return new CompileError(message, top().location, options.filename);
         },
 
-        registerAllocator: new RegisterAllocator(writer),
-
-        callWithFreeRegister<T>(fn: (register: Register) => T): T {
+        callWithFreeRegister<T>(this: CodegenState, fn: (register: Register) => T): T {
             return this.registerAllocator.callWithFreeRegister(fn);
         },
 
         // Allocates a number of registers to be used at the same time.
-        callWithFreeRegisters<T>(count: number, fn: (...registers: Register[]) => T, registers: Register[] = []): T {
+        callWithFreeRegisters<T>(
+            this: CodegenState,
+            count: number,
+            fn: (...registers: Register[]) => T,
+            registers: Register[] = [],
+        ): T {
             if (count > this.registerAllocator.maxUsed) {
                 throw new Error(`Cannot use more than ${this.registerAllocator.maxUsed} registers at the same time.`);
             }
@@ -445,30 +534,24 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
             return fn(...registers);
         },
 
-        borrowRegister<T>(register: Register, fn: () => T) {
+        borrowRegister<T>(this: CodegenState, register: Register, fn: () => T) {
             return this.registerAllocator.borrowRegister(register, fn);
         },
     };
-
-    const globalState: CodegenState = statePrototype.extend({
-        scope: rootScope,
-        prefix: '',
-        assemblyWriter: writer,
-    });
 
     topLevelStatements.forEach(descend(generateTopLevelStatement, globalState));
 
     tracing.restoreTraceHandler();
 
     //region Types
-    function isVoidType(type) {
+    function isVoidType(type: Type) {
         return type.kind === 'NamedType' && type.name === 'void';
     }
 
     //endregion
 
     //region Tracing
-    function traceHandler(family, ...args) {
+    function traceHandler(family: string, ...args: any) {
         writer.comment(`trace(${family}): ${args.join(' ')}`);
     }
 
@@ -493,22 +576,42 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         }
     }
 
-    function checkNodeKind(node, kinds, message: string = `Expected ${kinds.join(' or ')}, got ${node.kind}.`) {
+    function assumeNodeKind<TKind extends NodeKind>(
+        node: AnyNode,
+        kind: TKind,
+        message: string = `Expected ${kind}, got ${node.kind}.`
+    ): asserts node is NodeOfKind<TKind> {
+    }
+
+    function checkNodeKinds(node: AnyNode, kinds: string[], message: string = `Expected ${kinds.join(' or ')}, got ${node.kind}.`) {
         check(kinds.includes(node.kind), message);
     }
 
     //endregion
 
     //region Tree traversal
-    function top() {
-        return R.last(stack);
+    function top(): AnyNode {
+        const last = R.last(stack);
+
+        if (last === undefined) {
+            throw new Error('top(): Empty stack');
+        }
+
+        return last;
     }
 
-    function into(fn, node, state) {
+    function into<T, TNode extends AnyNode>(
+        fn: (node: TNode, state: CodegenState) => T,
+        node: TNode,
+        state: CodegenState,
+    ): T {
         return descend(fn, state)(node);
     }
 
-    function descend<T>(fn: (node, state: CodegenState) => T, state: CodegenState): (node: AnyNode) => T {
+    function descend<T, TNode extends AnyNode>(
+        fn: (node: TNode, state: CodegenState) => T,
+        state: CodegenState,
+    ): (node: TNode) => T {
         return node => {
             trace('traverse', 'enter', node.kind, showLocation(node.location));
             stack.push(node);
@@ -520,14 +623,6 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
 
             return result;
         };
-    }
-
-    function match(node: AnyNode, mappings): void {
-        if (!mappings.hasOwnProperty(node.kind)) {
-            throw new Error(`match(): Unhandled node kind: ${node.kind}.`);
-        }
-
-        mappings[node.kind](node);
     }
 
     //endregion

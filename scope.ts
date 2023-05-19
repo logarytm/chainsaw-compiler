@@ -12,7 +12,7 @@ export class Scope {
         this.bindings = bindings;
     }
 
-    lookup(name: string, error: (name: string) => never): Binding | never {
+    lookup(name: string, error: (name: string) => never): Binding {
         if (this.bindings.hasOwnProperty(name)) {
             return this.bindings[name];
         }

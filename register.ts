@@ -13,10 +13,10 @@ export class RegisterAllocator {
     private assemblyWriter: AssemblyWriter;
     private nextUnallocated: number;
     private readonly firstInaccessible: number;
-    private readonly maxUsed: number;
+    public readonly maxUsed: number;
     private readonly all: Register[];
 
-    constructor(assemblyWriter) {
+    constructor(assemblyWriter: AssemblyWriter) {
         this.assemblyWriter = assemblyWriter;
 
         /**
@@ -62,7 +62,7 @@ export class RegisterAllocator {
         return result;
     }
 
-    isAllocated(register) {
+    isAllocated(register: Register): boolean {
         const index = this.all.findIndex(r => r.isEqualTo(register));
 
         return this.nextUnallocated > index;

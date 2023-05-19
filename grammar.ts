@@ -13,12 +13,43 @@ export type Location = {
     };
 };
 
-type Node<TKind extends string, TExtra extends object = {}> = {
+export type NodeKind
+    = 'FunctionDeclaration' | 'FunctionDefinition' | 'NameTypePair' | 'Body' | 'VariableDeclaration'
+    | 'ReturnStatement' | 'ConditionalStatement' | 'LoopingStatement' | 'InlineAssembler' | 'ExpressionStatement'
+    | 'EmptyInstruction' | 'PointerType' | 'ArrayType' | 'NamedType' | 'BinaryOperator' | 'UnaryOperator'
+    | 'FunctionApplication' | 'ArrayDereference' | 'Identifier' | 'Number' | 'String';
+
+export type NodeOfKind<TKind extends NodeKind> = {
+    'FunctionDeclaration': FunctionDeclaration;
+    'FunctionDefinition': FunctionDefinition;
+    'NameTypePair': NameTypePair;
+    'Body': Body;
+    'VariableDeclaration': VariableDeclaration;
+    'ReturnStatement': ReturnStatement;
+    'ConditionalStatement': ConditionalStatement;
+    'LoopingStatement': LoopingStatement;
+    'InlineAssembler': InlineAssembler;
+    'ExpressionStatement': ExpressionStatement;
+    'EmptyInstruction': EmptyInstruction;
+    'PointerType': PointerType;
+    'ArrayType': ArrayType;
+    'NamedType': NamedType;
+    'BinaryOperator': BinaryOperator;
+    'UnaryOperator': UnaryOperator;
+    'FunctionApplication': FunctionApplication;
+    'ArrayDereference': ArrayDereference;
+    'Identifier': Identifier;
+    'Number': NumberLiteral;
+    'String': StringLiteral;
+}[TKind];
+
+type Node<TKind extends string, TExtra = {}> = {
     kind: TKind;
     location: Location;
+    isEqualTo?: (other: AnyNode) => boolean | null;
 } & TExtra;
 
-export type AnyNode = Node<string>;
+export type AnyNode = Node<NodeKind>;
 
 export type Program = TopLevelStatement[];
 
@@ -100,7 +131,7 @@ export type PointerType = Node<'PointerType', {
 }>;
 
 export type ArrayType = Node<'ArrayType', {
-    capacity: number;
+    capacity: NumberLiteral;
     type: Type;
 }>;
 

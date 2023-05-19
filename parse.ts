@@ -1,3 +1,5 @@
+import { Program } from './grammar';
+
 const winston = require('winston');
 const peg = require('pegjs');
 
@@ -35,12 +37,14 @@ if (isOutOfDate(grammarFileName, outputFilename)) {
     regenerate();
 }
 
-export const parse = require(outputFilename).parse;
+export const parse = require(outputFilename).parse as (filename: string, options: {
+    tracer: any,
+}) => Program;
 
-export function parseFile(filename) {
+export function parseFile(filename: string): Program {
     return parse(readFile(filename), {
         tracer: {
-            trace(e) {
+            trace(e: unknown): void {
                 // noop
             },
         }
