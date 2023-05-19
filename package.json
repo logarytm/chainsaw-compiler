@@ -15,5 +15,8 @@
   },
   "scripts": {
     "build": "pegjs -o parse-generated.js parse.pegjs"
+  },
+  "devDependencies": {
+    "browserify": "^17.0.0"
   }
 }

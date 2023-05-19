@@ -3,6 +3,7 @@
     "target": "ES2015",
     "lib": ["es2017"],
     "module": "commonjs",
+    "moduleResolution": "Node",
     "sourceMap": true,
     "outDir": "ts-dist",
     "allowSyntheticDefaultImports": true,
