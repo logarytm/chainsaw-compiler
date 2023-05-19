@@ -140,7 +140,12 @@
         return value !== undefined;
     }
 
+    // (
+    //     head: PrimaryExpression,
+    //     tail: [unknown, BinaryToken, unknown, PrimaryExpresion][]
+    // ) => PrimaryExpression | BinaryOperator
     function operatorsToTree({ head, tail }) {
+        // { operator: BinaryToken, rhs: PrimaryExpression }[]
         tail = tail.map((element) => {
             return {
                 operator: element[1],
@@ -148,12 +153,14 @@
             };
         });
 
+        // (lhs: Expression, minPrecedence: number) => Expression
         function collect(lhs, minPrecedence) {
             let operator, rhs;
 
             while (tail.length && precedenceOf(tail[0].operator) >= minPrecedence) {
                 const tmp = tail.shift();
                 operator = tmp.operator;
+                // PrimaryExpression
                 rhs = tmp.rhs;
 
                 let lookahead = tail[0];
