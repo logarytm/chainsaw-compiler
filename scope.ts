@@ -1,3 +1,5 @@
+import { Binding } from './contracts';
+
 export class Scope {
     private readonly parent: any;
     // noinspection TypeScriptFieldCanBeMadeReadonly
@@ -20,7 +22,7 @@ export class Scope {
         return error(name);
     }
 
-    bind(name, binding, alreadyBound): void {
+    bind(name, binding: Binding, alreadyBound: (binding: Binding) => void): void {
         if (this.bindings.hasOwnProperty(name)) {
             alreadyBound(this.bindings[name]);
         }

@@ -118,9 +118,9 @@ export function nodesEqual(a, b) {
 }
 
 export function readFile(filename): string {
-    return fs.readFileSync(filename, 'UTF-8');
+    return fs.readFileSync(filename, 'utf-8');
 }
 
 export function writeFile(filename, content: string) {
-    fs.writeFileSync(filename, content, { encoding: 'UTF-8' });
+    fs.writeFileSync(filename, content, { encoding: 'utf-8' });
 }

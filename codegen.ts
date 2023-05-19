@@ -4,20 +4,12 @@ import { createCallingConvention, getReservationSize } from './abi';
 import { AssemblyWriter, Immediate, Register, Relative } from './assembly';
 import { RegisterAllocator, registers } from './register';
 import { Scope } from './scope';
-import { CodegenState } from './contracts';
+import { Binding, CodegenState, FUNCTION_NATURE, PARAMETER_NATURE, VARIABLE_NATURE } from './contracts';
 import { AnyNode } from './grammar';
 
 declare global {
     const tracing: any;
 }
-
-/**
- * These values are assigned to names in the scope.  For example, every function declaration has FUNCTION_NATURE, and
- * we can protect from assigning to functions by checking the nature property of a name.
- */
-const FUNCTION_NATURE = Symbol('function');
-const VARIABLE_NATURE = Symbol('variable');
-const PARAMETER_NATURE = Symbol('parameter');
 
 export function generateCode(topLevelStatements, writer: AssemblyWriter, options) {
     const result = { success: true };
@@ -57,7 +49,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
          *   - Type information, which lets us emit proper calls and check type correctness later on, including
          *   - The binding nature, which informs what the name symbolises (function, variable, named type...)
          */
-        const binding = {
+        const binding: Binding = {
             label,
             functionName,
             isDefinition,
@@ -72,6 +64,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
         binding.callingConvention.validateDeclaration(binding, state);
 
         state.scope.bind(functionName, binding, function alreadyBound(previousBinding) {
+
+            check(previousBinding.nature === FUNCTION_NATURE, `Redefinition of ${functionName} with different type`);
 
             // There can never be more than one definition.
             if (previousBinding.isDefinition && binding.isDefinition) {
@@ -130,6 +124,7 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
 
         state.scope.bind(variableName, {
             label,
+            name: variableName,
             type: declaration.variableType,
             nature: VARIABLE_NATURE,
         }, function (binding) {
@@ -486,11 +481,11 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
     /**
      * Reports an unrecoverable error.
      */
-    function fatal(message: string): void {
+    function fatal(message: string): never {
         throw globalState.createError(message);
     }
 
-    function check(condition: boolean, message: string): void {
+    function check(condition: boolean, message: string): asserts condition {
         if (!condition) {
             fatal(message);
         }

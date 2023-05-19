@@ -16,7 +16,7 @@ export function getReservationSize(type) {
     }
 }
 
-interface ICallingConvention {
+export interface ICallingConvention {
     validateDeclaration(binding, state);
 
     emitCall(binding, args, state, computeExpressionIntoRegister: (register: Register, argument: any, state: CodegenState) => void): void;
@@ -95,7 +95,7 @@ class FastcallConvention implements ICallingConvention {
     }
 }
 
-export function createCallingConvention(name) {
+export function createCallingConvention(name: string): ICallingConvention {
     switch (name) {
     case 'stdcall':
         return new StdcallConvention();
