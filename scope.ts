@@ -1,16 +1,18 @@
 import { Binding } from './contracts';
 
-export class Scope {
-    private readonly parent: any;
-    // noinspection TypeScriptFieldCanBeMadeReadonly
-    private bindings: any;
+type Bindings = { [name: string]: Binding };
 
-    constructor(parent = null) {
+export class Scope {
+    private readonly parent: Scope | null;
+    // noinspection TypeScriptFieldCanBeMadeReadonly
+    private bindings: Bindings;
+
+    constructor(parent: Scope | null = null, bindings: Bindings = {}) {
         this.parent = parent;
-        this.bindings = {};
+        this.bindings = bindings;
     }
 
-    lookup(name, error) {
+    lookup(name: string, error: (name: string) => never): Binding | never {
         if (this.bindings.hasOwnProperty(name)) {
             return this.bindings[name];
         }
@@ -19,10 +21,10 @@ export class Scope {
             return this.parent.lookup(name, error);
         }
 
-        return error(name);
+        error(name);
     }
 
-    bind(name, binding: Binding, alreadyBound: (binding: Binding) => void): void {
+    bind(name: string, binding: Binding, alreadyBound: (binding: Binding) => void): void {
         if (this.bindings.hasOwnProperty(name)) {
             alreadyBound(this.bindings[name]);
         }
@@ -30,11 +32,8 @@ export class Scope {
         this.bindings[name] = binding;
     }
 
-    extend(newBindings = {}) {
-        const childScope = new Scope(this);
-        childScope.bindings = newBindings;
-
-        return childScope;
+    extend(newBindings: Bindings = {}) {
+        return new Scope(this, newBindings);
     }
 }
 

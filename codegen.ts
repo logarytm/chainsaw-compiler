@@ -215,9 +215,11 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
                 check(application.function.kind === 'Identifier', `Calling expressions as functions is not implemented.`);
 
                 const functionName = application.function.name;
-                const binding = state.scope.lookup(functionName, () => {
-                    fatal(`${functionName} is not defined.`);
+                const binding = state.scope.lookup(functionName, (name: string): never => {
+                    return fatal(`${functionName} is not defined.`);
                 });
+
+                check(binding.nature === FUNCTION_NATURE, `${functionName} is not a function.`);
 
                 check(
                     application.args.length === binding.arity,
@@ -327,8 +329,8 @@ export function generateCode(topLevelStatements, writer: AssemblyWriter, options
                     switch (operator.lhs.kind) {
                     case 'Identifier': {
                         const identifier = operator.lhs;
-                        lhsOperand = new Relative(state.scope.lookup(identifier.name, () => {
-                            error(`${identifier.name} is not defined`);
+                        lhsOperand = new Relative(state.scope.lookup(identifier.name, (name: string): never => {
+                            return fatal(`${identifier.name} is not defined`);
                         }).label);
                         break;
                     }
