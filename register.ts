@@ -1,5 +1,4 @@
 import { AssemblyWriter, Register } from './assembly';
-import './utils';
 
 export const registers = {
     ax: new Register('AX'),
@@ -11,8 +10,8 @@ export const registers = {
 
 export class RegisterAllocator {
     private assemblyWriter: AssemblyWriter;
-    private nextUnallocated: number;
-    private readonly firstInaccessible: number;
+    private readonly allocated: Set<Register>;
+    private wraparound: number;
     public readonly maxUsed: number;
     private readonly all: Register[];
 
@@ -28,13 +27,26 @@ export class RegisterAllocator {
          * Index of the next unallocated register in the above array.  If this is equal to the number of all registers,
          * then no register is available and we must save on the stack.
          */
-        this.nextUnallocated = 0;
-        this.firstInaccessible = this.all.length;
+        this.allocated = new Set<Register>();
+
+        this.wraparound = 0;
 
         /**
          * Maximum number of registers that may be used at the same time.
          */
         this.maxUsed = this.all.length;
+    }
+
+    markRegisterAsUsed<T>(register: Register, fn: () => T) {
+        if (this.allocated.has(register)) {
+            throw new Error('Cannot mark register as used. This is a compiler bug.');
+        }
+
+        this.allocated.add(register);
+        const result = fn();
+        this.allocated.delete(register);
+
+        return result;
     }
 
     /**
@@ -63,39 +75,38 @@ export class RegisterAllocator {
     }
 
     isAllocated(register: Register): boolean {
-        const index = this.all.findIndex(r => r.isEqualTo(register));
+        return this.allocated.has(register);
+    }
 
-        return this.nextUnallocated > index;
+    private haveFreeRegisters(): boolean {
+        return this.allocated.size < this.all.length;
     }
 
     callWithFreeRegister<T>(fn: (register: Register) => T) {
-        if (this.nextUnallocated < this.firstInaccessible) {
-            const register = this.all[this.nextUnallocated];
+        if (this.haveFreeRegisters()) {
+            const register = this.all.find(register => !this.allocated.has(register)) as Register;
 
             // If a register is available, use it.
             trace('register-allocation', 'start', register.name);
-            this.nextUnallocated++;
 
             const result = fn(register);
 
             trace('register-allocation', 'end', register.name);
-            this.nextUnallocated--;
 
             return result;
         }
 
         // Otherwise wrap around, saving the previous value on the stack.
-        const register = this.all[this.nextUnallocated % this.maxUsed];
+        this.wraparound = (this.wraparound + 1) % this.all.length;
+        const register = this.all[this.wraparound];
 
         trace('register-allocation', 'start', register.name);
         this.assemblyWriter.opcode('pop', register);
-        this.nextUnallocated++;
 
         const result = fn(register);
 
         trace('register-allocation', 'end', register.name);
         this.assemblyWriter.opcode('pop', register);
-        this.nextUnallocated--;
 
         return result;
     }

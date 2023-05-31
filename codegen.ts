@@ -4,14 +4,7 @@ import { createCallingConvention, getReservationSize, ParameterBindings } from '
 import { AssemblyWriter, Immediate, Operand, Register, Relative } from './assembly';
 import { RegisterAllocator, registers } from './register';
 import { Scope } from './scope';
-import {
-    Binding,
-    CodegenState,
-    FUNCTION_NATURE,
-    FunctionBinding,
-    PARAMETER_NATURE, ParameterBinding,
-    VARIABLE_NATURE,
-} from './contracts';
+import { CodegenState, FUNCTION_NATURE, FunctionBinding, PARAMETER_NATURE, VARIABLE_NATURE } from './contracts';
 import {
     AnyNode,
     ArrayDereference,
@@ -22,16 +15,19 @@ import {
     ExpressionStatement,
     FunctionApplication,
     FunctionDeclaration,
-    FunctionDefinition, FunctionStatement, Identifier,
+    FunctionDefinition,
+    FunctionStatement,
+    Identifier,
     InlineAssembler,
-    LoopingStatement, NumberLiteral,
+    LoopingStatement,
+    NodeKind,
+    NodeOfKind,
     Program,
     ReturnStatement,
-    Statement, StringLiteral,
-    TopLevelStatement, Type,
+    TopLevelStatement,
+    Type,
     UnaryOperator,
     VariableDeclaration,
-    NodeKind, NodeOfKind,
 } from './grammar';
 
 declare global {
@@ -258,8 +254,10 @@ export function generateCode(topLevelStatements: Program, writer: AssemblyWriter
     }
 
     function generateReturnStatement(rs: ReturnStatement, state: CodegenState): void {
-        computeExpression(registers.ax, rs.expression, state);
-        writer.opcode('ret');
+        return state.registerAllocator.markRegisterAsUsed(registers.ax, () => {
+            computeExpression(registers.ax, rs.expression, state);
+            writer.opcode('ret');
+        });
     }
 
     function computeExpression(destinationRegister: Register, expression: Expression, state: CodegenState): void {
@@ -427,6 +425,7 @@ export function generateCode(topLevelStatements: Program, writer: AssemblyWriter
                 }[expression.operator];
 
                 state.callWithFreeRegister(rhsRegister => {
+                    console.log(destinationRegister, rhsRegister);
                     computeExpression(destinationRegister, expression.lhs, state);
                     computeExpression(rhsRegister, expression.rhs, state);
                     writer.opcode(opcode, destinationRegister, rhsRegister);

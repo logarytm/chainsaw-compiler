@@ -123,6 +123,7 @@ export function isIndexableObject(value: unknown): value is { [key: string]: any
 export function isNode(object: unknown): object is AnyNode {
     return isIndexableObject(object) && object.hasOwnProperty('kind') && typeof object.kind === 'string';
 }
+
 export function nodesEqual(left: any, right: any): boolean {
     const performDeepComparison = isIndexableObject(left) && isIndexableObject(right);
 
