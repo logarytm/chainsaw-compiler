@@ -466,8 +466,10 @@ function generateCode(topLevelStatements, writer, options) {
         body.statements.forEach(statement => generateStatement(statement, state));
     }
     function generateReturnStatement(rs, state) {
-        computeExpression(register_1.registers.ax, rs.expression, state);
-        writer.opcode('ret');
+        return state.registerAllocator.markRegisterAsUsed(register_1.registers.ax, () => {
+            computeExpression(register_1.registers.ax, rs.expression, state);
+            writer.opcode('ret');
+        });
     }
     function computeExpression(destinationRegister, expression, state) {
         switch (expression.kind) {
@@ -606,6 +608,7 @@ function generateCode(topLevelStatements, writer, options) {
                                 '&': 'and',
                             }[expression.operator];
                             state.callWithFreeRegister(rhsRegister => {
+                                console.log(destinationRegister, rhsRegister);
                                 computeExpression(destinationRegister, expression.lhs, state);
                                 computeExpression(rhsRegister, expression.rhs, state);
                                 writer.opcode(opcode, destinationRegister, rhsRegister);
@@ -4376,7 +4379,6 @@ exports.parseFile = parseFile;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegisterAllocator = exports.registers = void 0;
 const assembly_1 = require("./assembly");
-require("./utils");
 exports.registers = {
     ax: new assembly_1.Register('AX'),
     bx: new assembly_1.Register('BX'),
@@ -4395,12 +4397,21 @@ class RegisterAllocator {
          * Index of the next unallocated register in the above array.  If this is equal to the number of all registers,
          * then no register is available and we must save on the stack.
          */
-        this.nextUnallocated = 0;
-        this.firstInaccessible = this.all.length;
+        this.allocated = new Set();
+        this.wraparound = 0;
         /**
          * Maximum number of registers that may be used at the same time.
          */
         this.maxUsed = this.all.length;
+    }
+    markRegisterAsUsed(register, fn) {
+        if (this.allocated.has(register)) {
+            throw new Error('Cannot mark register as used. This is a compiler bug.');
+        }
+        this.allocated.add(register);
+        const result = fn();
+        this.allocated.delete(register);
+        return result;
     }
     /**
      * Borrows the register.  This function guarantees that the data in the requested register value will not be lost
@@ -4422,35 +4433,36 @@ class RegisterAllocator {
         return result;
     }
     isAllocated(register) {
-        const index = this.all.findIndex(r => r.isEqualTo(register));
-        return this.nextUnallocated > index;
+        return this.allocated.has(register);
+    }
+    haveFreeRegisters() {
+        return this.allocated.size < this.all.length;
     }
     callWithFreeRegister(fn) {
-        if (this.nextUnallocated < this.firstInaccessible) {
-            const register = this.all[this.nextUnallocated];
+        if (this.haveFreeRegisters()) {
+            const register = this.all.find(register => !this.allocated.has(register));
             // If a register is available, use it.
             trace('register-allocation', 'start', register.name);
-            this.nextUnallocated++;
+            this.allocated.add(register);
             const result = fn(register);
             trace('register-allocation', 'end', register.name);
-            this.nextUnallocated--;
+            this.allocated.delete(register);
             return result;
         }
         // Otherwise wrap around, saving the previous value on the stack.
-        const register = this.all[this.nextUnallocated % this.maxUsed];
+        this.wraparound = (this.wraparound + 1) % this.all.length;
+        const register = this.all[this.wraparound];
         trace('register-allocation', 'start', register.name);
         this.assemblyWriter.opcode('pop', register);
-        this.nextUnallocated++;
         const result = fn(register);
         trace('register-allocation', 'end', register.name);
         this.assemblyWriter.opcode('pop', register);
-        this.nextUnallocated--;
         return result;
     }
 }
 exports.RegisterAllocator = RegisterAllocator;
 
-},{"./assembly":2,"./utils":11}],9:[function(require,module,exports){
+},{"./assembly":2}],9:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Scope = void 0;

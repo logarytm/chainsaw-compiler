@@ -88,10 +88,12 @@ export class RegisterAllocator {
 
             // If a register is available, use it.
             trace('register-allocation', 'start', register.name);
+            this.allocated.add(register);
 
             const result = fn(register);
 
             trace('register-allocation', 'end', register.name);
+            this.allocated.delete(register);
 
             return result;
         }
